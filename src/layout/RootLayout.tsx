@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router";
 import {
   AppBar,
   Box,
@@ -12,6 +12,7 @@ import {
 import ElectricCarIcon from "@mui/icons-material/ElectricCar";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { UI } from "../theme/theme";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { setSidebarOpen } from "../features/app/appSlice";
@@ -19,6 +20,9 @@ import { useGeoLocation } from "../hooks/useGeolocation";
 
 export default function RootLayout() {
   const geo = useGeoLocation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const showBack = location.pathname !== "/";
   const isMdUp = useAppSelector((state) => state.app.isMdMode);
   const dispatch = useAppDispatch();
 
@@ -35,6 +39,22 @@ export default function RootLayout() {
         }}
       >
         <Toolbar sx={{ gap: 1.25 }}>
+          {showBack && (
+            <Tooltip title="Back">
+              <IconButton
+                onClick={() => navigate(-1)}
+                sx={{
+                  border: `1px solid ${UI.border2}`,
+                  borderRadius: 3,
+                  backgroundColor: "rgba(10,10,16,0.03)",
+                  color: UI.text,
+                }}
+                aria-label="Go back"
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <Box
             sx={{
               width: 38,

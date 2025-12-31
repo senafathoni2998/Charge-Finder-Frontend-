@@ -25,8 +25,8 @@ export const MOCK_STATIONS = /** @type {Station[]} */ [
     lng: 106.8167,
     address: "Jl. MH Thamrin, Jakarta",
     connectors: [
-      { type: "CCS2", powerKW: 100 },
-      { type: "Type2", powerKW: 22 },
+      { type: "CCS2", powerKW: 100, ports: 4, availablePorts: 2 },
+      { type: "Type2", powerKW: 22, ports: 6, availablePorts: 5 },
     ],
     status: "AVAILABLE",
     lastUpdatedISO: new Date(Date.now() - 7 * 60_000).toISOString(),
@@ -59,8 +59,8 @@ export const MOCK_STATIONS = /** @type {Station[]} */ [
     lng: 106.8227,
     address: "Jl. Jend. Sudirman, Jakarta",
     connectors: [
-      { type: "CCS2", powerKW: 60 },
-      { type: "CHAdeMO", powerKW: 50 },
+      { type: "CCS2", powerKW: 60, ports: 2, availablePorts: 0 },
+      { type: "CHAdeMO", powerKW: 50, ports: 1, availablePorts: 0 },
     ],
     status: "BUSY",
     lastUpdatedISO: new Date(Date.now() - 18 * 60_000).toISOString(),
@@ -91,7 +91,7 @@ export const MOCK_STATIONS = /** @type {Station[]} */ [
     lat: -6.2446,
     lng: 106.783,
     address: "Kebayoran Lama, Jakarta",
-    connectors: [{ type: "Type2", powerKW: 11 }],
+    connectors: [{ type: "Type2", powerKW: 11, ports: 2, availablePorts: 0 }],
     status: "OFFLINE",
     lastUpdatedISO: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
     photos: [
@@ -126,8 +126,8 @@ export const MOCK_STATIONS = /** @type {Station[]} */ [
     lng: 106.905,
     address: "Kelapa Gading, Jakarta",
     connectors: [
-      { type: "CCS2", powerKW: 150 },
-      { type: "Type2", powerKW: 22 },
+      { type: "CCS2", powerKW: 150, ports: 6, availablePorts: 4 },
+      { type: "Type2", powerKW: 22, ports: 4, availablePorts: 3 },
     ],
     status: "AVAILABLE",
     lastUpdatedISO: new Date(Date.now() - 4 * 60_000).toISOString(),

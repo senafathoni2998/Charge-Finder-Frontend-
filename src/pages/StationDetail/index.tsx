@@ -41,6 +41,7 @@ import { useGeoLocation } from "../../hooks/useGeolocation";
 import SectionCard from "./components/SectionCard";
 import StatusChip from "../MainPage/components/StatusChip";
 import MiniPhoto from "./components/MiniPhoto";
+import { useParams } from "react-router";
 
 /**
  * ChargeFinder — Station Detail Page (Canvas-safe) — LIGHT MODE
@@ -57,8 +58,10 @@ export default function StationDetailPage() {
     defaultMatches: true,
   });
 
+  const { id: stationId } = useParams();
+
   // Demo selector for canvas. In your app, stationId will come from route params.
-  const [stationId, setStationId] = useState("st-001");
+  //   const [stationId, setStationId] = useState("st-001");
   const [reportOpen, setReportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [reportType, setReportType] = useState("Broken connector");
@@ -70,13 +73,15 @@ export default function StationDetailPage() {
   // Simulate async load
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 300);
+    const t = setTimeout(() => setLoading(false), 1000);
     return () => clearTimeout(t);
   }, [stationId]);
 
   const station = useMemo(() => {
     return MOCK_STATIONS.find((s) => s.id === stationId) ?? null;
   }, [stationId]);
+
+  console.log("Station detail for ID:", stationId, station);
 
   const distanceKm = useMemo(() => {
     if (!station) return null;
@@ -119,129 +124,10 @@ export default function StationDetailPage() {
     setReportNote("");
   };
 
+  console.log("Rendering StationDetailPage for station:", station, loading);
+
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
-      {/* <AppBar
-        position="sticky"
-        elevation={0}
-        sx={{
-          backgroundColor: UI.glass,
-          backdropFilter: "blur(10px)",
-          borderBottom: `1px solid ${UI.border2}`,
-          color: UI.text,
-        }}
-      >
-        <Toolbar sx={{ gap: 1.25 }}>
-          <Tooltip title="Back">
-            <IconButton
-              onClick={() => {
-                // Canvas has no router — in your app, use navigate(-1).
-                // eslint-disable-next-line no-alert
-                if (typeof window !== "undefined")
-                  window.alert("Back (wire this to react-router in your app)");
-              }}
-              sx={{
-                border: `1px solid ${UI.border2}`,
-                borderRadius: 3,
-                backgroundColor: "rgba(10,10,16,0.03)",
-                color: UI.text,
-              }}
-              aria-label="Back"
-            >
-              <ArrowBackIcon />
-            </IconButton>
-          </Tooltip>
-
-          <Box
-            sx={{
-              width: 38,
-              height: 38,
-              borderRadius: 2.5,
-              display: "grid",
-              placeItems: "center",
-              background: UI.brandGrad,
-              boxShadow: "0 12px 30px rgba(124,92,255,0.14)",
-              color: "white",
-            }}
-          >
-            <ElectricBoltIcon fontSize="small" />
-          </Box>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{ fontWeight: 950, color: UI.text, lineHeight: 1.1 }}
-              noWrap
-            >
-              Station details
-            </Typography>
-            <Typography variant="caption" sx={{ color: UI.text3 }}>
-              ChargeFinder
-            </Typography>
-          </Box>
-
-          <Box sx={{ flex: 1 }} />
-
-          <TextField
-            select
-            size="small"
-            value={stationId}
-            onChange={(e) => setStationId(e.target.value)}
-            sx={{
-              width: isMdUp ? 320 : 180,
-              "& .MuiOutlinedInput-root": {
-                backgroundColor: "rgba(10,10,16,0.03)",
-                borderRadius: 3,
-              },
-            }}
-          >
-            {MOCK_STATIONS.map((s) => (
-              <MenuItem key={s.id} value={s.id}>
-                {s.name}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <Tooltip title={geo.error || "Use my location"}>
-            <span>
-              <IconButton
-                onClick={geo.request}
-                disabled={geo.loading}
-                sx={{
-                  ml: 0.75,
-                  border: `1px solid ${UI.border2}`,
-                  borderRadius: 3,
-                  backgroundColor: "rgba(10,10,16,0.03)",
-                  color: UI.text,
-                }}
-                aria-label="Use my location"
-              >
-                {geo.loading ? (
-                  <CircularProgress size={18} />
-                ) : (
-                  <MyLocationIcon />
-                )}
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Share">
-            <IconButton
-              onClick={share}
-              sx={{
-                ml: 0.75,
-                border: `1px solid ${UI.border2}`,
-                borderRadius: 3,
-                backgroundColor: "rgba(10,10,16,0.03)",
-                color: UI.text,
-              }}
-              aria-label="Share"
-            >
-              <ShareIcon />
-            </IconButton>
-          </Tooltip>
-        </Toolbar>
-      </AppBar> */}
-
       <Box
         sx={{
           px: { xs: 2, md: 3 },

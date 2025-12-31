@@ -47,6 +47,7 @@ import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setMdMode, setSidebarOpen } from "../../features/app/appSlice";
 import { boundsFromStations, filterStations } from "../../utils/distance";
 import { useGeoLocation } from "../../hooks/useGeolocation";
+import { useNavigate } from "react-router";
 
 /**
  * ChargeFinder — Map Explorer Page (Canvas-safe) — LIGHT MODE
@@ -64,6 +65,7 @@ import { useGeoLocation } from "../../hooks/useGeolocation";
 
 export default function MainPage() {
   // Filters are local state (canvas-safe). In your real app, sync them to URL query.
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState(/** @type {""|Availability} */ "");
   const [connectorSet, setConnectorSet] = useState(new Set());
@@ -114,7 +116,8 @@ export default function MainPage() {
   );
 
   const focusStation = (s) => {
-    setSelectedId(s.id);
+    navigate(`/station/${s.id}`);
+    // setSelectedId(s.id);
   };
 
   const FiltersPanel = (
