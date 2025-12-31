@@ -6,9 +6,15 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import { UI } from "../theme/theme";
 import { useGeoLocation } from "../pages/MainPage/utils/useGeoLocation";
 import { useState } from "react";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { setSidebarOpen } from "../features/app/appSlice";
 
 export default function RootLayout() {
       const geo = useGeoLocation();
+      const isMdUp = useAppSelector((state) => state.app.isMdMode);
+      const dispatch = useAppDispatch();
+
+
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
       <AppBar
@@ -50,7 +56,7 @@ export default function RootLayout() {
               <IconButton
                 onClick={() => {
                   geo.request();
-                //   if (!isMdUp) setDrawerOpen(true);
+                  if (!isMdUp) dispatch(setSidebarOpen(true));
                 }}
                 disabled={geo.loading}
                 sx={{
@@ -70,10 +76,10 @@ export default function RootLayout() {
             </span>
           </Tooltip>
 
-          {/* {!isMdUp && (
+          {!isMdUp && (
             <Tooltip title="Filters">
               <IconButton
-                onClick={() => setDrawerOpen(true)}
+                onClick={() => dispatch(setSidebarOpen(true))}
                 sx={{
                   border: `1px solid ${UI.border2}`,
                   borderRadius: 3,
@@ -85,7 +91,7 @@ export default function RootLayout() {
                 <FilterListIcon />
               </IconButton>
             </Tooltip>
-          )} */}
+          )}
         </Toolbar>
       </AppBar>
 

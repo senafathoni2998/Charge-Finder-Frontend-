@@ -46,6 +46,8 @@ import { boundsFromStations, filterStations } from "./utils/utilFunc";
 import { DRAWER_WIDTH } from "./utils/data";
 import React from "react";
 import StationCard from "./components/StationCard";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { setMdMode, setSidebarOpen } from "../../features/app/appSlice";
 
 /**
  * ChargeFinder — Map Explorer Page (Canvas-safe) — LIGHT MODE
@@ -68,13 +70,20 @@ export default function MainPage() {
   const [connectorSet, setConnectorSet] = useState(new Set());
   const [minKW, setMinKW] = useState(0);
 
+  const drawerOpen = useAppSelector((state) => state.app.isSidebarOpen);
+  const dispatch = useAppDispatch();
+
   // SSR-safe: prevents MUI from touching matchMedia during non-browser rendering.
   const isMdUp = useMediaQuery("(min-width:900px)", {
     noSsr: true,
     defaultMatches: true,
   });
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    dispatch(setMdMode(isMdUp));
+  }, [isMdUp]);
+
+  // const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -108,8 +117,6 @@ export default function MainPage() {
   const focusStation = (s) => {
     setSelectedId(s.id);
   };
-
-
 
   const FiltersPanel = (
     <Box sx={{ p: 2.25 }}>
@@ -255,7 +262,12 @@ export default function MainPage() {
 
           <Stack spacing={1.2}>
             {filtered.map((s) => (
-              <StationCard key={s.id} s={s} selectedId={selectedId} focusStation={focusStation} />
+              <StationCard
+                key={s.id}
+                s={s}
+                selectedId={selectedId}
+                focusStation={focusStation}
+              />
             ))}
             {!filtered.length && (
               <Box
@@ -295,20 +307,20 @@ export default function MainPage() {
           height: "calc(100dvh - 64px)",
         }}
       >
-        {/* {isMdUp ? ( */}
-        <Box
-          sx={{
-            borderRight: `1px solid ${UI.border2}`,
-            backgroundColor: UI.surface2,
-            overflow: "auto",
-          }}
-        >
-          {FiltersPanel}
-        </Box>
-        {/* ) : (
+        {isMdUp ? (
+          <Box
+            sx={{
+              borderRight: `1px solid ${UI.border2}`,
+              backgroundColor: UI.surface2,
+              overflow: "auto",
+            }}
+          >
+            {FiltersPanel}
+          </Box>
+        ) : (
           <Drawer
             open={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
+            onClose={() => dispatch(setSidebarOpen(false))}
             PaperProps={{
               sx: {
                 width: "min(92vw, 420px)",
@@ -320,7 +332,7 @@ export default function MainPage() {
           >
             {FiltersPanel}
           </Drawer>
-        )} */}
+        )}
 
         <Box sx={{ position: "relative" }}>
           <Box
