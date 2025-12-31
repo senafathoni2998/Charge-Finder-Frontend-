@@ -24,8 +24,6 @@ export function boundsFromStations(stations) {
   return { minLat, maxLat, minLng, maxLng, latSpan, lngSpan };
 }
 
-
-
 export function filterStations(stations, filters, userCenter) {
   const lower = filters.q.toLowerCase();
   return stations

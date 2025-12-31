@@ -45,6 +45,7 @@ import { useGeoLocation } from "./utils/useGeoLocation";
 import { boundsFromStations, filterStations } from "./utils/utilFunc";
 import { DRAWER_WIDTH } from "./utils/data";
 import React from "react";
+import StationCard from "./components/StationCard";
 
 /**
  * ChargeFinder — Map Explorer Page (Canvas-safe) — LIGHT MODE
@@ -108,70 +109,7 @@ export default function MainPage() {
     setSelectedId(s.id);
   };
 
-  const StationCard = ({ s }) => (
-    <Card
-      variant="outlined"
-      onClick={() => focusStation(s)}
-      sx={{
-        cursor: "pointer",
-        borderRadius: 3,
-        borderColor: selectedId === s.id ? "rgba(124,92,255,0.35)" : UI.border2,
-        backgroundColor:
-          selectedId === s.id ? "rgba(124,92,255,0.08)" : UI.surface,
-        boxShadow:
-          selectedId === s.id ? "none" : "0 10px 22px rgba(10,10,16,0.06)",
-        transition:
-          "transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          borderColor: UI.border,
-          boxShadow: "0 14px 26px rgba(10,10,16,0.08)",
-        },
-      }}
-    >
-      <CardContent sx={{ p: 2 }}>
-        <Stack spacing={1.25}>
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="flex-start"
-            spacing={1}
-          >
-            <Box>
-              <Typography
-                sx={{ fontWeight: 850, lineHeight: 1.1, color: UI.text }}
-              >
-                {s.name}
-              </Typography>
-              <Typography variant="body2" sx={{ color: UI.text2 }}>
-                {s.address}
-              </Typography>
-            </Box>
-            <StatusChip status={s.status} />
-          </Stack>
 
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {s.connectors.slice(0, 3).map((c, idx) => (
-              <ConnectorChip key={idx} type={c.type} powerKW={c.powerKW} />
-            ))}
-          </Stack>
-
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-          >
-            <Typography variant="body2" sx={{ color: UI.text2 }}>
-              {s.distanceKm.toFixed(1)} km away
-            </Typography>
-            <Typography variant="caption" sx={{ color: UI.text3 }}>
-              Updated {minutesAgo(s.lastUpdatedISO)}m ago
-            </Typography>
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
 
   const FiltersPanel = (
     <Box sx={{ p: 2.25 }}>
@@ -317,7 +255,7 @@ export default function MainPage() {
 
           <Stack spacing={1.2}>
             {filtered.map((s) => (
-              <StationCard key={s.id} s={s} />
+              <StationCard key={s.id} s={s} selectedId={selectedId} focusStation={focusStation} />
             ))}
             {!filtered.length && (
               <Box
