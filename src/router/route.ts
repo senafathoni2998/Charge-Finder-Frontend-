@@ -3,6 +3,7 @@ import App from "../pages/MainPage";
 import RootLayout from "../layout/RootLayout";
 import StationDetail from "../pages/StationDetail";
 import Login from "../pages/Login";
+import Profile from "../pages/Profile";
 import { RedirectIfAuth, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
@@ -20,6 +21,10 @@ const router = createBrowserRouter([
           {
             path: "station/:id",
             Component: StationDetail,
+          },
+          {
+            path: "profile",
+            Component: Profile,
           },
         ],
       },

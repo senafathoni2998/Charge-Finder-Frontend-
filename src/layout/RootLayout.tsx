@@ -6,8 +6,6 @@ import {
   Typography,
   IconButton,
   Tooltip,
-  useMediaQuery,
-  CircularProgress,
 } from "@mui/material";
 import ElectricCarIcon from "@mui/icons-material/ElectricCar";
 import PersonIcon from "@mui/icons-material/Person";
@@ -16,10 +14,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { UI } from "../theme/theme";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { setSidebarOpen } from "../features/app/appSlice";
-import { useGeoLocation } from "../hooks/useGeolocation";
 
 export default function RootLayout() {
-  const geo = useGeoLocation();
   const location = useLocation();
   const navigate = useNavigate();
   const showBack = location.pathname !== "/";
@@ -78,26 +74,21 @@ export default function RootLayout() {
 
           <Box sx={{ flex: 1 }} />
 
-          <Tooltip title={geo.error || "Use my location"}>
-            <span>
-              <IconButton
-                onClick={() => {
-                  if (!isMdUp) dispatch(setSidebarOpen(true));
-                }}
-                disabled={geo.loading}
-                sx={{
-                  borderRadius: 3,
-                  color: UI.text,
-                  ":hover": {
-                    border: `1px solid ${UI.border2}`,
-                    backgroundColor: "rgba(10,10,16,0.03)",
-                  },
-                }}
-                aria-label="Use my location"
-              >
-                <PersonIcon />
-              </IconButton>
-            </span>
+          <Tooltip title="Profile">
+            <IconButton
+              onClick={() => navigate("/profile")}
+              sx={{
+                borderRadius: 3,
+                color: UI.text,
+                ":hover": {
+                  border: `1px solid ${UI.border2}`,
+                  backgroundColor: "rgba(10,10,16,0.03)",
+                },
+              }}
+              aria-label="Open profile"
+            >
+              <PersonIcon />
+            </IconButton>
           </Tooltip>
 
           {!isMdUp && (
