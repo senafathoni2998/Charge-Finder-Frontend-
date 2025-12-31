@@ -1,5 +1,5 @@
 import { Box, Stack, Typography } from "@mui/material";
-import { useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -33,6 +33,28 @@ function FitBounds({ bounds }) {
       { padding: [40, 40] }
     );
   }, [map, bounds]);
+
+  return null;
+}
+
+function FocusStation({ selectedId, stations, zoom = 15 }) {
+  const map = useMap();
+  const lastIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!selectedId) {
+      lastIdRef.current = null;
+      return;
+    }
+    if (lastIdRef.current === selectedId) return;
+    const target = stations.find((s) => s.id === selectedId);
+    if (!target) return;
+    if (!Number.isFinite(target.lat) || !Number.isFinite(target.lng)) return;
+    lastIdRef.current = selectedId;
+    map.setView([target.lat, target.lng], Math.max(map.getZoom(), zoom), {
+      animate: false,
+    });
+  }, [map, selectedId, stations, zoom]);
 
   return null;
 }
@@ -76,6 +98,35 @@ export default function MapCanvas({
           width: "100%",
           fontFamily: "inherit",
         },
+        "& .cf-marker-core, & .cf-user-core": {
+          filter: "drop-shadow(0 6px 12px rgba(10,10,16,0.25))",
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          transition: "transform 140ms ease",
+        },
+        "& .cf-marker-core.is-active": {
+          transform: "scale(1.08)",
+        },
+        "& .cf-marker-halo.is-active": {
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          animation: "cf-pulse 1.6s ease-out infinite",
+        },
+        "& .cf-user-halo": {
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          animation: "cf-user-pulse 2s ease-out infinite",
+        },
+        "@keyframes cf-pulse": {
+          "0%": { transform: "scale(1)", opacity: 0.7 },
+          "70%": { transform: "scale(1.25)", opacity: 0.2 },
+          "100%": { transform: "scale(1.32)", opacity: 0 },
+        },
+        "@keyframes cf-user-pulse": {
+          "0%": { transform: "scale(1)", opacity: 0.6 },
+          "70%": { transform: "scale(1.35)", opacity: 0.18 },
+          "100%": { transform: "scale(1.45)", opacity: 0 },
+        },
       }}
     >
       <MapContainer bounds={mapBounds}>
@@ -84,45 +135,77 @@ export default function MapCanvas({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitBounds bounds={bounds} />
+        <FocusStation selectedId={selectedId} stations={stations} />
 
         {stations.map((s) => {
           const isActive = selectedId === s.id;
           const color = statusColor(s.status);
           return (
-            <CircleMarker
-              key={s.id}
-              center={[s.lat, s.lng]}
-              // radius={isActive ? 9 : 7}
-              pathOptions={{
-                color,
-                fillColor: color,
-                fillOpacity: 0.9,
-                weight: isActive ? 3 : 2,
-              }}
-              eventHandlers={{
-                click: () => onSelect?.(s.id),
-              }}
-            >
-              <Tooltip>
-                {s.name} • {s.status}
-              </Tooltip>
-            </CircleMarker>
+            <Fragment key={s.id}>
+              <CircleMarker
+                center={[s.lat, s.lng]}
+                radius={isActive ? 18 : 14}
+                interactive={false}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: isActive ? 0.18 : 0.12,
+                  weight: 0,
+                  className: `cf-marker-halo ${isActive ? "is-active" : ""}`,
+                }}
+              />
+              <CircleMarker
+                center={[s.lat, s.lng]}
+                radius={isActive ? 9 : 7}
+                pathOptions={{
+                  color: "#ffffff",
+                  fillColor: color,
+                  fillOpacity: 0.95,
+                  weight: 2,
+                  className: `cf-marker-core ${isActive ? "is-active" : ""}`,
+                }}
+                eventHandlers={{
+                  click: () => onSelect?.(s.id),
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
+                  {s.name} • {s.status}
+                </Tooltip>
+              </CircleMarker>
+            </Fragment>
           );
         })}
 
         {userLoc && (
-          <CircleMarker
-            center={[userLoc.lat, userLoc.lng]}
-            // radius={6}
-            pathOptions={{
-              color: "rgba(124,92,255,0.98)",
-              fillColor: "rgba(124,92,255,0.98)",
-              fillOpacity: 0.9,
-              weight: 2,
-            }}
-          >
-            <Tooltip>Your location</Tooltip>
-          </CircleMarker>
+          <>
+            <CircleMarker
+              center={[userLoc.lat, userLoc.lng]}
+              radius={16}
+              interactive={false}
+              pathOptions={{
+                color: "rgba(124,92,255,0.9)",
+                fillColor: "rgba(124,92,255,0.6)",
+                fillOpacity: 0.12,
+                weight: 2,
+                className: "cf-user-halo",
+              }}
+            />
+            <CircleMarker
+              center={[userLoc.lat, userLoc.lng]}
+              radius={6}
+              pathOptions={{
+                color: "#ffffff",
+                fillColor: "rgba(124,92,255,0.98)",
+                fillOpacity: 0.98,
+                weight: 2,
+                className: "cf-user-core",
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
+                Your location
+              </Tooltip>
+            </CircleMarker>
+          </>
         )}
       </MapContainer>
 
