@@ -89,6 +89,7 @@ export default function ChargeFinderSignupPage() {
       try {
         window.localStorage.setItem("cf_auth_token", String(Date.now()));
         window.localStorage.setItem("cf_auth_email", email.trim());
+        window.localStorage.setItem("cf_auth_password", password);
         if (remember)
           window.localStorage.setItem("cf_login_email", email.trim());
         else window.localStorage.removeItem("cf_login_email");

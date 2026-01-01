@@ -4,6 +4,8 @@ import type { ConnectorType } from "../../models/model";
 type AuthState = {
   isAuthenticated: boolean;
   email: string | null;
+  name: string | null;
+  region: string | null;
   cars: UserCar[];
   activeCarId: string | null;
 };
@@ -76,11 +78,20 @@ const ensureActiveCarId = (
 
 const getInitialAuth = (): AuthState => {
   if (typeof window === "undefined") {
-    return { isAuthenticated: false, email: null, cars: [], activeCarId: null };
+    return {
+      isAuthenticated: false,
+      email: null,
+      name: null,
+      region: null,
+      cars: [],
+      activeCarId: null,
+    };
   }
   try {
     const token = window.localStorage.getItem("cf_auth_token");
     const email = window.localStorage.getItem("cf_auth_email");
+    const name = window.localStorage.getItem("cf_profile_name");
+    const region = window.localStorage.getItem("cf_profile_region");
     const cars = parseCars(window.localStorage.getItem("cf_user_cars"));
     const legacyCar = parseLegacyCar(
       window.localStorage.getItem("cf_user_car")
@@ -91,11 +102,20 @@ const getInitialAuth = (): AuthState => {
     return {
       isAuthenticated: !!token,
       email: email ?? null,
+      name: name && name.trim() ? name.trim() : null,
+      region: region && region.trim() ? region.trim() : null,
       cars: mergedCars,
       activeCarId,
     };
   } catch {
-    return { isAuthenticated: false, email: null, cars: [], activeCarId: null };
+    return {
+      isAuthenticated: false,
+      email: null,
+      name: null,
+      region: null,
+      cars: [],
+      activeCarId: null,
+    };
   }
 };
 
@@ -106,6 +126,13 @@ const authSlice = createSlice({
     login(state, action: PayloadAction<{ email: string }>) {
       state.isAuthenticated = true;
       state.email = action.payload.email;
+    },
+    updateProfile(
+      state,
+      action: PayloadAction<{ name: string | null; region: string | null }>
+    ) {
+      state.name = action.payload.name;
+      state.region = action.payload.region;
     },
     addCar(state, action: PayloadAction<UserCar>) {
       state.cars.push(action.payload);
@@ -124,12 +151,14 @@ const authSlice = createSlice({
     logout(state) {
       state.isAuthenticated = false;
       state.email = null;
+      state.name = null;
+      state.region = null;
       state.cars = [];
       state.activeCarId = null;
     },
   },
 });
 
-export const { login, logout, addCar, removeCar, setActiveCar } =
+export const { login, logout, addCar, removeCar, setActiveCar, updateProfile } =
   authSlice.actions;
 export default authSlice.reducer;

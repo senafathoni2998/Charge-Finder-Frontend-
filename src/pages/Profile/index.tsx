@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -7,28 +8,73 @@ import {
   CardContent,
   Chip,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  InputAdornment,
+  Snackbar,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import PersonIcon from "@mui/icons-material/Person";
+import LockIcon from "@mui/icons-material/Lock";
 import LogoutIcon from "@mui/icons-material/Logout";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import { useNavigate } from "react-router";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout, removeCar, setActiveCar } from "../../features/auth/authSlice";
+import {
+  logout,
+  removeCar,
+  setActiveCar,
+  updateProfile,
+} from "../../features/auth/authSlice";
+import {
+  passwordIssue,
+  strengthLabel,
+  toneChipSx,
+} from "../../utils/validate";
 
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const email = useAppSelector((state) => state.auth.email);
+  const profileName = useAppSelector((state) => state.auth.name);
+  const profileRegion = useAppSelector((state) => state.auth.region);
   const cars = useAppSelector((state) => state.auth.cars);
   const activeCarId = useAppSelector((state) => state.auth.activeCarId);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [regionDraft, setRegionDraft] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordToast, setPasswordToast] = useState<string | null>(null);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+
+  const newPwIssue = useMemo(() => passwordIssue(newPassword), [newPassword]);
+  const newPwStrength = useMemo(
+    () => strengthLabel(newPassword),
+    [newPassword]
+  );
 
   const displayName = useMemo(() => {
+    if (profileName && profileName.trim()) return profileName.trim();
     if (!email) return "Driver";
     const [name] = email.split("@");
     return name ? name.replace(/[^a-zA-Z0-9]+/g, " ").trim() : "Driver";
-  }, [email]);
+  }, [email, profileName]);
+
+  const regionLabel = profileRegion?.trim() || "Jakarta, ID";
 
   const initials = useMemo(() => {
     const parts = displayName.split(" ").filter(Boolean);
@@ -49,6 +95,105 @@ export default function ProfilePage() {
     }
   };
 
+  const persistProfile = (nextName: string | null, nextRegion: string | null) => {
+    if (typeof window === "undefined") return;
+    try {
+      if (nextName) window.localStorage.setItem("cf_profile_name", nextName);
+      else window.localStorage.removeItem("cf_profile_name");
+      if (nextRegion)
+        window.localStorage.setItem("cf_profile_region", nextRegion);
+      else window.localStorage.removeItem("cf_profile_region");
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleOpenProfileEditor = () => {
+    setNameDraft(profileName?.trim() || displayName);
+    setRegionDraft(profileRegion?.trim() || "Jakarta, ID");
+    setProfileError(null);
+    setProfileOpen(true);
+  };
+
+  const handleSaveProfile = () => {
+    const nextName = nameDraft.trim();
+    const nextRegion = regionDraft.trim();
+    if (!nextName) {
+      setProfileError("Name is required.");
+      return;
+    }
+    dispatch(
+      updateProfile({
+        name: nextName,
+        region: nextRegion || null,
+      })
+    );
+    persistProfile(nextName, nextRegion || null);
+    setProfileOpen(false);
+  };
+
+  const readStoredPassword = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = window.localStorage.getItem("cf_auth_password");
+      return stored && stored.trim() ? stored : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleOpenPasswordEditor = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError(null);
+    setShowCurrentPw(false);
+    setShowNewPw(false);
+    setShowConfirmPw(false);
+    setPasswordOpen(true);
+  };
+
+  const handleSavePassword = () => {
+    setPasswordError(null);
+    const storedPassword = readStoredPassword();
+    if (!currentPassword.trim()) {
+      setPasswordError("Enter your current password.");
+      return;
+    }
+    if (storedPassword && currentPassword !== storedPassword) {
+      setPasswordError("Current password is incorrect.");
+      return;
+    }
+    if (newPwIssue) {
+      setPasswordError(newPwIssue);
+      return;
+    }
+    if (!newPassword.trim()) {
+      setPasswordError("Enter a new password.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError("New password must be different.");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("cf_auth_password", newPassword);
+      } catch {
+        // ignore
+      }
+    }
+    setPasswordOpen(false);
+    setPasswordToast("Password updated (demo).");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
   const handleSetActive = (carId: string) => {
     dispatch(setActiveCar(carId));
     persistCars(cars, carId);
@@ -67,6 +212,9 @@ export default function ProfilePage() {
       try {
         window.localStorage.removeItem("cf_auth_token");
         window.localStorage.removeItem("cf_auth_email");
+        window.localStorage.removeItem("cf_auth_password");
+        window.localStorage.removeItem("cf_profile_name");
+        window.localStorage.removeItem("cf_profile_region");
         window.localStorage.removeItem("cf_user_car");
         window.localStorage.removeItem("cf_user_cars");
         window.localStorage.removeItem("cf_active_car_id");
@@ -159,6 +307,14 @@ export default function ProfilePage() {
                 <Stack spacing={1.25}>
                   <Stack direction="row" spacing={1}>
                     <Typography sx={{ color: UI.text3, minWidth: 120 }}>
+                      Name
+                    </Typography>
+                    <Typography sx={{ color: UI.text, fontWeight: 700 }}>
+                      {displayName}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1}>
+                    <Typography sx={{ color: UI.text3, minWidth: 120 }}>
                       Email
                     </Typography>
                     <Typography sx={{ color: UI.text, fontWeight: 700 }}>
@@ -178,7 +334,7 @@ export default function ProfilePage() {
                       Region
                     </Typography>
                     <Typography sx={{ color: UI.text, fontWeight: 700 }}>
-                      Jakarta, ID
+                      {regionLabel}
                     </Typography>
                   </Stack>
                 </Stack>
@@ -193,6 +349,7 @@ export default function ProfilePage() {
                   <Button
                     variant="outlined"
                     startIcon={<PersonIcon />}
+                    onClick={handleOpenProfileEditor}
                     sx={{
                       textTransform: "none",
                       borderRadius: 3,
@@ -200,9 +357,22 @@ export default function ProfilePage() {
                       color: UI.text,
                       backgroundColor: "rgba(10,10,16,0.01)",
                     }}
-                    disabled
                   >
-                    Edit profile (soon)
+                    Edit profile
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<LockIcon />}
+                    onClick={handleOpenPasswordEditor}
+                    sx={{
+                      textTransform: "none",
+                      borderRadius: 3,
+                      borderColor: UI.border,
+                      color: UI.text,
+                      backgroundColor: "rgba(10,10,16,0.01)",
+                    }}
+                  >
+                    Change password
                   </Button>
                   <Box sx={{ flex: 1 }} />
                   <Button
@@ -404,6 +574,297 @@ export default function ProfilePage() {
           </Card>
         </Stack>
       </Box>
+
+      <Dialog
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            backgroundColor: UI.surface,
+            border: `1px solid ${UI.border}`,
+            color: UI.text,
+            boxShadow: "0 24px 70px rgba(10,10,16,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 950 }}>Edit profile</DialogTitle>
+        <DialogContent dividers sx={{ borderColor: UI.border2 }}>
+          <Stack spacing={2}>
+            <TextField
+              label="Full name"
+              value={nameDraft}
+              onChange={(event) => {
+                setNameDraft(event.target.value);
+                if (profileError) setProfileError(null);
+              }}
+              fullWidth
+              required
+              error={!!profileError}
+              helperText={profileError || "Shown on your profile."}
+            />
+            <TextField
+              label="Email"
+              value={email || ""}
+              fullWidth
+              disabled
+            />
+            <TextField
+              label="Region"
+              value={regionDraft}
+              onChange={(event) => setRegionDraft(event.target.value)}
+              fullWidth
+              placeholder="Example: Jakarta, ID"
+              helperText="Used for local recommendations."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setProfileOpen(false)}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              borderColor: UI.border,
+              color: UI.text,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveProfile}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              background: UI.brandGradStrong,
+              color: "white",
+            }}
+          >
+            Save changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            backgroundColor: UI.surface,
+            border: `1px solid ${UI.border}`,
+            color: UI.text,
+            boxShadow: "0 24px 70px rgba(10,10,16,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 950 }}>Change password</DialogTitle>
+        <DialogContent dividers sx={{ borderColor: UI.border2 }}>
+          <Stack spacing={2}>
+            {passwordError ? (
+              <Alert severity="error">{passwordError}</Alert>
+            ) : null}
+            <TextField
+              label="Current password"
+              value={currentPassword}
+              onChange={(event) => {
+                setCurrentPassword(event.target.value);
+                if (passwordError) setPasswordError(null);
+              }}
+              autoComplete="current-password"
+              fullWidth
+              type={showCurrentPw ? "text" : "password"}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon sx={{ color: UI.text3 }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowCurrentPw((v) => !v)}
+                      edge="end"
+                      aria-label={
+                        showCurrentPw ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showCurrentPw ? (
+                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                      ) : (
+                        <VisibilityIcon sx={{ color: UI.text3 }} />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 3,
+                  backgroundColor: "rgba(10,10,16,0.02)",
+                },
+              }}
+            />
+            <TextField
+              label="New password"
+              value={newPassword}
+              onChange={(event) => {
+                setNewPassword(event.target.value);
+                if (passwordError) setPasswordError(null);
+              }}
+              autoComplete="new-password"
+              fullWidth
+              type={showNewPw ? "text" : "password"}
+              error={newPassword.length > 0 && !!newPwIssue}
+              helperText={newPassword.length > 0 && newPwIssue ? newPwIssue : " "}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon sx={{ color: UI.text3 }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowNewPw((v) => !v)}
+                      edge="end"
+                      aria-label={showNewPw ? "Hide password" : "Show password"}
+                    >
+                      {showNewPw ? (
+                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                      ) : (
+                        <VisibilityIcon sx={{ color: UI.text3 }} />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 3,
+                  backgroundColor: "rgba(10,10,16,0.02)",
+                },
+              }}
+            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              {newPassword.length > 0 ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`Strength: ${newPwStrength.label}`}
+                  sx={{
+                    borderRadius: 999,
+                    color: UI.text,
+                    fontWeight: 900,
+                    borderWidth: 1,
+                    ...toneChipSx(newPwStrength.tone),
+                  }}
+                />
+              ) : null}
+              <Typography variant="caption" sx={{ color: UI.text3 }}>
+                Use 8+ characters, letters, and numbers.
+              </Typography>
+            </Stack>
+            <TextField
+              label="Confirm new password"
+              value={confirmPassword}
+              onChange={(event) => {
+                setConfirmPassword(event.target.value);
+                if (passwordError) setPasswordError(null);
+              }}
+              autoComplete="new-password"
+              fullWidth
+              type={showConfirmPw ? "text" : "password"}
+              error={
+                confirmPassword.length > 0 && confirmPassword !== newPassword
+              }
+              helperText={
+                confirmPassword.length > 0 && confirmPassword !== newPassword
+                  ? "Passwords do not match."
+                  : " "
+              }
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon sx={{ color: UI.text3 }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowConfirmPw((v) => !v)}
+                      edge="end"
+                      aria-label={
+                        showConfirmPw ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showConfirmPw ? (
+                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                      ) : (
+                        <VisibilityIcon sx={{ color: UI.text3 }} />
+                      )}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 3,
+                  backgroundColor: "rgba(10,10,16,0.02)",
+                },
+              }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setPasswordOpen(false)}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              borderColor: UI.border,
+              color: UI.text,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSavePassword}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              background: UI.brandGradStrong,
+              color: "white",
+            }}
+          >
+            Update password
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!passwordToast}
+        autoHideDuration={4000}
+        onClose={() => setPasswordToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setPasswordToast(null)}
+          severity="success"
+          variant="filled"
+          sx={{ borderRadius: 3 }}
+        >
+          {passwordToast}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

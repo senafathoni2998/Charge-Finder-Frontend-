@@ -91,6 +91,22 @@ export default function ChargeFinderLoginPage() {
       return;
     }
 
+    if (typeof window !== "undefined") {
+      try {
+        const storedPassword = window.localStorage.getItem("cf_auth_password");
+        if (
+          storedPassword &&
+          storedPassword.trim() &&
+          storedPassword !== password
+        ) {
+          setError("Incorrect password.");
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     setSubmitting(true);
 
     // demo latency
@@ -104,6 +120,7 @@ export default function ChargeFinderLoginPage() {
       try {
         window.localStorage.setItem("cf_auth_token", String(Date.now()));
         window.localStorage.setItem("cf_auth_email", email.trim());
+        window.localStorage.setItem("cf_auth_password", password);
         if (remember)
           window.localStorage.setItem("cf_login_email", email.trim());
         else window.localStorage.removeItem("cf_login_email");

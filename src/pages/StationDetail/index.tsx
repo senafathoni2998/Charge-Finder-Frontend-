@@ -14,6 +14,10 @@ import {
   Divider,
   Tooltip,
   CircularProgress,
+  LinearProgress,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -41,8 +45,26 @@ import { useGeoLocation } from "../../hooks/useGeolocation";
 import SectionCard from "./components/SectionCard";
 import StatusChip from "../MainPage/components/StatusChip";
 import MiniPhoto from "./components/MiniPhoto";
-import { useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { useAppSelector } from "../../app/hooks";
+
+const PAYMENT_METHODS = [
+  {
+    id: "card",
+    label: "Card - Visa **** 4242",
+    helper: "Instant approval",
+  },
+  {
+    id: "ewallet",
+    label: "E-Wallet - GoPay",
+    helper: "Balance required",
+  },
+  {
+    id: "bank",
+    label: "Bank transfer - BCA",
+    helper: "May take 1-3 min",
+  },
+];
 
 /**
  * ChargeFinder — Station Detail Page (Canvas-safe) — LIGHT MODE
@@ -60,6 +82,11 @@ export default function StationDetailPage() {
   });
 
   const { id: stationId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isAuthenticated = useAppSelector(
+    (state) => state.auth.isAuthenticated
+  );
   const cars = useAppSelector((state) => state.auth.cars);
   const activeCarId = useAppSelector((state) => state.auth.activeCarId);
 
@@ -69,6 +96,22 @@ export default function StationDetailPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [reportType, setReportType] = useState("Broken connector");
   const [reportNote, setReportNote] = useState("");
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState(
+    PAYMENT_METHODS[0].id
+  );
+  const [ticket, setTicket] = useState<{
+    id: string;
+    methodId: string;
+    methodLabel: string;
+    priceLabel: string;
+    purchasedAt: string;
+  } | null>(null);
+  const [chargingOpen, setChargingOpen] = useState(false);
+  const [chargingProgress, setChargingProgress] = useState(0);
+  const [chargingStatus, setChargingStatus] = useState<
+    "idle" | "charging" | "done"
+  >("idle");
 
   const geo = useGeoLocation();
   const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
@@ -85,6 +128,24 @@ export default function StationDetailPage() {
   }, [stationId]);
 
   console.log("Station detail for ID:", stationId, station);
+
+  const selectedPayment = useMemo(
+    () =>
+      PAYMENT_METHODS.find((method) => method.id === selectedPaymentId) ??
+      PAYMENT_METHODS[0],
+    [selectedPaymentId]
+  );
+
+  const ticketKwh = 20;
+  const ticketPriceLabel = station
+    ? formatCurrency(station.pricing.currency, station.pricing.perKwh * ticketKwh)
+    : "N/A";
+  const totalChargeMinutes = 18;
+  const remainingMinutes = Math.max(
+    0,
+    Math.ceil(((100 - chargingProgress) / 100) * totalChargeMinutes)
+  );
+  const deliveredKwh = Math.round((ticketKwh * chargingProgress) / 100);
 
   const distanceKm = useMemo(() => {
     if (!station) return null;
@@ -103,8 +164,98 @@ export default function StationDetailPage() {
     );
   }, [activeCar, station]);
 
-  const canStartCharging =
-    station?.status === "AVAILABLE" && (isCompatible ?? true);
+  const canCharge =
+    isAuthenticated &&
+    station?.status === "AVAILABLE" &&
+    (isCompatible ?? true) &&
+    !!ticket;
+  const canStartCharging = canCharge && chargingStatus !== "charging";
+  const chargingActionLabel =
+    chargingStatus === "charging" ? "View charging" : "Start charging";
+  const paymentActionLabel = !isAuthenticated
+    ? "Log in to buy ticket"
+    : ticket
+      ? "Change payment"
+      : "Buy charging ticket";
+
+  const handleLoginRedirect = () => {
+    const next = encodeURIComponent(
+      `${location.pathname}${location.search}${location.hash}`
+    );
+    navigate(`/login?next=${next}`);
+  };
+
+  const handleBuyTicket = () => {
+    if (!station || !isAuthenticated) return;
+    const ticketId = `TICKET-${Date.now()}`;
+    const methodLabel = selectedPayment.label;
+    setTicket({
+      id: ticketId,
+      methodId: selectedPayment.id,
+      methodLabel,
+      priceLabel: ticketPriceLabel,
+      purchasedAt: new Date().toISOString(),
+    });
+    setPaymentOpen(false);
+  };
+
+  const handleStartCharging = () => {
+    if (!canStartCharging) return;
+    setChargingProgress(0);
+    setChargingStatus("charging");
+    setChargingOpen(true);
+  };
+
+  const handleChargingAction = () => {
+    if (chargingStatus === "charging") {
+      setChargingOpen(true);
+      return;
+    }
+    handleStartCharging();
+  };
+
+  const handlePaymentOpen = () => {
+    if (!isAuthenticated) {
+      handleLoginRedirect();
+      return;
+    }
+    setPaymentOpen(true);
+  };
+
+  const handleCloseCharging = () => {
+    setChargingOpen(false);
+    if (chargingStatus === "done") {
+      setChargingStatus("idle");
+      setChargingProgress(0);
+    }
+  };
+
+  const handleStopCharging = () => {
+    setChargingOpen(false);
+    setChargingStatus("idle");
+    setChargingProgress(0);
+  };
+
+  useEffect(() => {
+    if (chargingStatus !== "charging") return;
+    const interval = window.setInterval(() => {
+      setChargingProgress((prev) => {
+        const next = Math.min(100, prev + 4);
+        if (next >= 100) setChargingStatus("done");
+        return next;
+      });
+    }, 700);
+    return () => window.clearInterval(interval);
+  }, [chargingStatus]);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    setPaymentOpen(false);
+    setTicket(null);
+    setChargingOpen(false);
+    setChargingProgress(0);
+    setChargingStatus("idle");
+  }, [isAuthenticated]);
 
   const openGoogleMaps = () => {
     if (!station || typeof window === "undefined") return;
@@ -348,27 +499,28 @@ export default function StationDetailPage() {
                 </Typography>
                 <Button
                   variant="contained"
-                  disabled={!canStartCharging}
+                  disabled={!canCharge}
                   startIcon={<ElectricBoltIcon />}
                   sx={{
                     textTransform: "none",
                     borderRadius: 3,
-                    background: canStartCharging
-                      ? UI.brandGradStrong
-                      : UI.brandGradDisabled,
+                    background: canCharge ? UI.brandGradStrong : UI.brandGradDisabled,
                     color: "white",
                     boxShadow: "0 14px 40px rgba(124,92,255,0.14)",
                   }}
-                  onClick={() => {
-                    // eslint-disable-next-line no-alert
-                    if (typeof window !== "undefined")
-                      window.alert(
-                        "Start charging (wire this to your reservation/payment flow)"
-                      );
-                  }}
+                  onClick={handleChargingAction}
                 >
-                  Start charging
+                  {chargingActionLabel}
                 </Button>
+                {!isAuthenticated ? (
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    Log in to buy a ticket and start charging.
+                  </Typography>
+                ) : !ticket ? (
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    Buy a ticket to start charging.
+                  </Typography>
+                ) : null}
                 {activeCar && isCompatible === false ? (
                   <Typography variant="caption" sx={{ color: UI.text3 }}>
                     Not compatible with your car's connector types.
@@ -459,7 +611,64 @@ export default function StationDetailPage() {
                 <Skeleton variant="rounded" height={18} />
               </Stack>
             ) : (
-              <Stack spacing={1.1}>
+              <Stack spacing={1.25}>
+                <Box
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 3,
+                    border: `1px solid ${UI.border2}`,
+                    backgroundColor: "rgba(10,10,16,0.02)",
+                  }}
+                >
+                  <Stack spacing={1}>
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="center"
+                    >
+                      <Typography variant="caption" sx={{ color: UI.text3 }}>
+                        Charging ticket
+                      </Typography>
+                      {ticket ? (
+                        <Chip
+                          size="small"
+                          label="Ready"
+                          sx={{
+                            borderRadius: 999,
+                            backgroundColor: "rgba(0,229,255,0.12)",
+                            border: "1px solid rgba(0,229,255,0.3)",
+                            color: UI.text,
+                            fontWeight: 800,
+                          }}
+                        />
+                      ) : null}
+                    </Stack>
+
+                    <Typography sx={{ fontWeight: 900, color: UI.text }}>
+                      {ticket ? ticket.priceLabel : ticketPriceLabel}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: UI.text2 }}>
+                      {ticket
+                        ? `Paid with ${ticket.methodLabel}`
+                        : `Estimated ${ticketKwh} kWh pack`}
+                    </Typography>
+                    <Button
+                      variant={ticket ? "outlined" : "contained"}
+                      onClick={handlePaymentOpen}
+                      disabled={!station}
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: 3,
+                        borderColor: UI.border,
+                        color: ticket ? UI.text : "white",
+                        background: ticket ? "transparent" : UI.brandGradStrong,
+                      }}
+                    >
+                      {paymentActionLabel}
+                    </Button>
+                  </Stack>
+                </Box>
+                <Divider sx={{ borderColor: UI.border2 }} />
                 <InfoRow
                   label="Per kWh"
                   value={
@@ -508,6 +717,280 @@ export default function StationDetailPage() {
           </SectionCard>
         </Stack>
       </Box>
+
+      {/* Payment dialog */}
+      <Dialog
+        open={paymentOpen && isAuthenticated}
+        onClose={() => setPaymentOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            backgroundColor: UI.surface,
+            border: `1px solid ${UI.border}`,
+            color: UI.text,
+            boxShadow: "0 24px 70px rgba(10,10,16,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 950 }}>Charging ticket</DialogTitle>
+        <DialogContent dividers sx={{ borderColor: UI.border2 }}>
+          <Stack spacing={2}>
+            <Typography variant="body2" sx={{ color: UI.text2 }}>
+              Choose a payment method for a {ticketKwh} kWh ticket.
+            </Typography>
+            <Box
+              sx={{
+                p: 1.25,
+                borderRadius: 3,
+                border: `1px solid ${UI.border2}`,
+                backgroundColor: "rgba(10,10,16,0.02)",
+              }}
+            >
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Typography variant="caption" sx={{ color: UI.text3 }}>
+                  Total
+                </Typography>
+                <Typography sx={{ fontWeight: 900, color: UI.text }}>
+                  {ticketPriceLabel}
+                </Typography>
+              </Stack>
+              <Typography variant="caption" sx={{ color: UI.text3 }}>
+                Price based on station rate.
+              </Typography>
+            </Box>
+            <RadioGroup
+              value={selectedPaymentId}
+              onChange={(event) => setSelectedPaymentId(event.target.value)}
+              sx={{ gap: 1 }}
+            >
+              {PAYMENT_METHODS.map((method) => {
+                const isSelected = selectedPaymentId === method.id;
+                return (
+                  <Box
+                    key={method.id}
+                    sx={{
+                      p: 1.25,
+                      borderRadius: 3,
+                      border: `1px solid ${
+                        isSelected ? "rgba(0,229,255,0.35)" : UI.border2
+                      }`,
+                      backgroundColor: isSelected
+                        ? "rgba(0,229,255,0.08)"
+                        : "rgba(10,10,16,0.02)",
+                    }}
+                  >
+                    <FormControlLabel
+                      value={method.id}
+                      control={
+                        <Radio
+                          sx={{
+                            color: UI.text3,
+                            "&.Mui-checked": { color: UI.text },
+                          }}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography sx={{ fontWeight: 800, color: UI.text }}>
+                            {method.label}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: UI.text3 }}>
+                            {method.helper}
+                          </Typography>
+                        </Box>
+                      }
+                      sx={{ alignItems: "flex-start", m: 0 }}
+                    />
+                  </Box>
+                );
+              })}
+            </RadioGroup>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setPaymentOpen(false)}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              borderColor: UI.border,
+              color: UI.text,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleBuyTicket}
+            disabled={!station || !isAuthenticated}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              background: UI.brandGradStrong,
+              color: "white",
+            }}
+          >
+            {ticket ? "Update payment" : "Buy ticket"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Charging dialog */}
+      <Dialog
+        open={chargingOpen}
+        onClose={handleCloseCharging}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            backgroundColor: UI.surface,
+            border: `1px solid ${UI.border}`,
+            color: UI.text,
+            boxShadow: "0 24px 70px rgba(10,10,16,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 950 }}>
+          {chargingStatus === "done"
+            ? "Charging complete"
+            : "Charging in progress"}
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: UI.border2 }}>
+          <Stack spacing={2}>
+            <Typography variant="body2" sx={{ color: UI.text2 }}>
+              {chargingStatus === "done"
+                ? "Session complete. You can unplug when it is safe."
+                : "Keep the connector plugged in while we deliver your ticket."}
+            </Typography>
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 3,
+                border: `1px solid ${UI.border2}`,
+                backgroundColor: "rgba(10,10,16,0.02)",
+              }}
+            >
+              <Stack spacing={1}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  <Typography sx={{ fontWeight: 900, color: UI.text }}>
+                    {chargingProgress}%
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: UI.text2 }}>
+                    {deliveredKwh} / {ticketKwh} kWh
+                  </Typography>
+                </Stack>
+                <LinearProgress
+                  variant="determinate"
+                  value={chargingProgress}
+                  sx={{
+                    height: 10,
+                    borderRadius: 999,
+                    backgroundColor: "rgba(10,10,16,0.08)",
+                    "& .MuiLinearProgress-bar": {
+                      borderRadius: 999,
+                      background: UI.brandGradStrong,
+                    },
+                  }}
+                />
+                <Typography variant="caption" sx={{ color: UI.text3 }}>
+                  {chargingStatus === "done"
+                    ? "Charging complete."
+                    : `Estimated time remaining: ${remainingMinutes} min`}
+                </Typography>
+              </Stack>
+            </Box>
+            {ticket ? (
+              <Box
+                sx={{
+                  p: 1.25,
+                  borderRadius: 3,
+                  border: `1px dashed ${UI.border}`,
+                  backgroundColor: "rgba(10,10,16,0.02)",
+                }}
+              >
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    Ticket ID
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={ticket.id}
+                    sx={{
+                      borderRadius: 999,
+                      backgroundColor: "rgba(10,10,16,0.04)",
+                      border: `1px solid ${UI.border2}`,
+                      color: UI.text,
+                      fontWeight: 800,
+                    }}
+                  />
+                </Stack>
+                <Typography variant="body2" sx={{ color: UI.text2, mt: 0.75 }}>
+                  Paid with {ticket.methodLabel}
+                </Typography>
+              </Box>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          {chargingStatus === "charging" ? (
+            <>
+              <Button
+                variant="outlined"
+                onClick={handleStopCharging}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: 3,
+                  borderColor: UI.border,
+                  color: UI.text,
+                }}
+              >
+                Stop charging
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleCloseCharging}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: 3,
+                  background: UI.brandGradStrong,
+                  color: "white",
+                }}
+              >
+                Hide
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={handleCloseCharging}
+              sx={{
+                textTransform: "none",
+                borderRadius: 3,
+                background: UI.brandGradStrong,
+                color: "white",
+              }}
+            >
+              Done
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Report dialog */}
       <Dialog

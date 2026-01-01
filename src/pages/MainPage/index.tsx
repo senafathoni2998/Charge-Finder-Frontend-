@@ -16,6 +16,7 @@ import {
   Card,
   CardContent,
   Button,
+  MenuItem,
   ToggleButton,
   ToggleButtonGroup,
   Slider,
@@ -38,6 +39,7 @@ import React from "react";
 import StationCard from "./components/StationCard";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setMdMode, setSidebarOpen } from "../../features/app/appSlice";
+import { setActiveCar } from "../../features/auth/authSlice";
 import { boundsFromStations, filterStations } from "../../utils/distance";
 import { useGeoLocation } from "../../hooks/useGeolocation";
 import { useLocation, useNavigate } from "react-router";
@@ -137,6 +139,34 @@ export default function MainPage() {
     // navigate(`/station/${s.id}`);
     setSelectedId(s.id);
   };
+
+  const persistActiveCar = (carId: string | null) => {
+    if (typeof window === "undefined") return;
+    try {
+      if (carId) window.localStorage.setItem("cf_active_car_id", carId);
+      else window.localStorage.removeItem("cf_active_car_id");
+      window.localStorage.removeItem("cf_user_car");
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSelectCar = (carId: string) => {
+    if (!carId) return;
+    dispatch(setActiveCar(carId));
+    persistActiveCar(carId);
+  };
+
+  useEffect(() => {
+    if (useCarFilter && !activeCar) {
+      setUseCarFilter(false);
+    } else if (useCarFilter && activeCar && !activeCar.connectorTypes.length) {
+      setUseCarFilter(false);
+    } else if (useCarFilter && activeCar) {
+      setConnectorSet(new Set(activeCar.connectorTypes));
+      setMinKW(activeCar.minKW || 0);
+    }
+  }, [useCarFilter, activeCar]);
 
   const accordionSx = {
     border: `1px solid ${UI.border2}`,
@@ -266,6 +296,108 @@ export default function MainPage() {
               </Box>
 
               <Box>
+                {isAuthenticated && (
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                  >
+                    <Typography variant="caption" sx={{ color: UI.text3 }}>
+                      My car
+                    </Typography>
+                  </Stack>
+                )}
+
+                {activeCar ? (
+                  <Stack spacing={1} sx={{ mt: 0.75, pt: 0.75 }}>
+                    <TextField
+                      select
+                      size="small"
+                      label="Selected car"
+                      value={activeCarId ?? ""}
+                      onChange={(event) =>
+                        handleSelectCar(String(event.target.value))
+                      }
+                      fullWidth
+                      sx={{
+                        mt: 0.5,
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 3,
+                          backgroundColor: "rgba(10,10,16,0.02)",
+                        },
+                      }}
+                    >
+                      {cars.map((car) => (
+                        <MenuItem key={car.id} value={car.id}>
+                          {car.name}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={useCarFilter}
+                          onChange={(e) => {
+                            setUseCarFilter(e.target.checked);
+                            setCarFilterTouched(true);
+                          }}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Typography sx={{ color: UI.text2, fontWeight: 700 }}>
+                          Use my car to filter stations
+                        </Typography>
+                      }
+                      sx={{ ml: -0.5 }}
+                    />
+                    {/* <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ mt: 0.75, flexWrap: "wrap" }}
+                    >
+                      {activeCar.connectorTypes.map((c) => (
+                        <Chip
+                          key={c}
+                          size="small"
+                          label={c}
+                          sx={{
+                            borderRadius: 999,
+                            backgroundColor: "rgba(124,92,255,0.12)",
+                            borderColor: "rgba(124,92,255,0.35)",
+                            color: UI.text,
+                            fontWeight: 700,
+                          }}
+                        />
+                      ))}
+                    </Stack> */}
+                  </Stack>
+                ) : isAuthenticated ? (
+                  <Stack spacing={1} sx={{ mt: 0.75 }}>
+                    <Typography variant="body2" sx={{ color: UI.text2 }}>
+                      Add a car to personalize results.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => navigate("/profile/cars/new")}
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: 3,
+                        borderColor: UI.border,
+                        color: UI.text,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      Add car
+                    </Button>
+                  </Stack>
+                ) : (
+                  <></>
+                )}
+              </Box>
+
+              <Box>
                 <Typography variant="caption" sx={{ color: UI.text3 }}>
                   Connectors
                 </Typography>
@@ -281,6 +413,12 @@ export default function MainPage() {
                       "CHAdeMO",
                     ].map((c) => {
                       const active = connectorSet.has(c);
+                      const chipBg = active
+                        ? "rgba(124,92,255,0.12)"
+                        : "transparent";
+                      const chipBorder = active
+                        ? "rgba(124,92,255,0.35)"
+                        : UI.border2;
                       return (
                         <Chip
                           key={c}
@@ -298,14 +436,18 @@ export default function MainPage() {
                           }}
                           sx={{
                             borderRadius: 999,
-                            backgroundColor: active
-                              ? "rgba(124,92,255,0.12)"
-                              : "transparent",
-                            borderColor: active
-                              ? "rgba(124,92,255,0.35)"
-                              : UI.border2,
+                            backgroundColor: chipBg,
+                            borderColor: chipBorder,
                             color: UI.text,
                             fontWeight: 700,
+                            ...(useCarFilter && {
+                              "&.Mui-disabled": {
+                                opacity: 1,
+                                color: UI.text,
+                                backgroundColor: chipBg,
+                                borderColor: chipBorder,
+                              },
+                            }),
                           }}
                         />
                       );
@@ -329,110 +471,6 @@ export default function MainPage() {
                   alignItems="center"
                 >
                   <Typography variant="caption" sx={{ color: UI.text3 }}>
-                    My car
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: UI.text3 }}>
-                    {activeCar ? activeCar.name : "Not set"}
-                  </Typography>
-                </Stack>
-
-                {activeCar ? (
-                  <>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={useCarFilter}
-                          onChange={(e) => {
-                            setUseCarFilter(e.target.checked);
-                            setCarFilterTouched(true);
-                          }}
-                          color="primary"
-                        />
-                      }
-                      label={
-                        <Typography sx={{ color: UI.text2, fontWeight: 700 }}>
-                          Use my car to filter stations
-                        </Typography>
-                      }
-                      sx={{ mt: 0.5, ml: -0.5 }}
-                    />
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ mt: 0.75, flexWrap: "wrap" }}
-                    >
-                      {activeCar.connectorTypes.map((c) => (
-                        <Chip
-                          key={c}
-                          size="small"
-                          label={c}
-                          sx={{
-                            borderRadius: 999,
-                            backgroundColor: "rgba(124,92,255,0.12)",
-                            borderColor: "rgba(124,92,255,0.35)",
-                            color: UI.text,
-                            fontWeight: 700,
-                          }}
-                        />
-                      ))}
-                    </Stack>
-                  </>
-                ) : isAuthenticated ? (
-                  <Stack spacing={1} sx={{ mt: 0.75 }}>
-                    <Typography variant="body2" sx={{ color: UI.text2 }}>
-                      Add a car to personalize results.
-                    </Typography>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => navigate("/profile/cars/new")}
-                      sx={{
-                        textTransform: "none",
-                        borderRadius: 3,
-                        borderColor: UI.border,
-                        color: UI.text,
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      Add car
-                    </Button>
-                  </Stack>
-                ) : (
-                  <Stack spacing={1} sx={{ mt: 0.75 }}>
-                    <Typography variant="body2" sx={{ color: UI.text2 }}>
-                      Log in to add a car and personalize results.
-                    </Typography>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() =>
-                        navigate(
-                          `/login?next=${encodeURIComponent(
-                            `${location.pathname}${location.search}${location.hash}`
-                          )}`
-                        )
-                      }
-                      sx={{
-                        textTransform: "none",
-                        borderRadius: 3,
-                        borderColor: UI.border,
-                        color: UI.text,
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      Log in
-                    </Button>
-                  </Stack>
-                )}
-              </Box>
-
-              <Box>
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <Typography variant="caption" sx={{ color: UI.text3 }}>
                     Minimum power
                   </Typography>
                   <Typography variant="caption" sx={{ color: UI.text3 }}>
@@ -440,13 +478,28 @@ export default function MainPage() {
                   </Typography>
                 </Stack>
                 <Slider
+                  disabled={useCarFilter}
                   value={Number.isFinite(minKW) ? minKW : 0}
                   onChange={(_, v) => setMinKW(Array.isArray(v) ? v[0] : v)}
                   step={10}
                   min={0}
                   max={200}
-                  sx={{ mt: 1 }}
+                  sx={{
+                    mt: 1,
+                    color: useCarFilter ? "rgba(124,92,255,0.9)" : undefined,
+                    ...(useCarFilter && {
+                      "&.Mui-disabled": { opacity: 1 },
+                    }),
+                  }}
                 />
+                {useCarFilter ? (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: UI.text3, mt: 0.75, display: "block" }}
+                  >
+                    Connector filters are driven by your car profile.
+                  </Typography>
+                ) : null}
               </Box>
             </Stack>
           </AccordionDetails>
