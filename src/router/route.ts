@@ -5,6 +5,7 @@ import StationDetail from "../pages/StationDetail";
 import Login from "../pages/Login";
 import Signup from "../pages/Signup";
 import Profile from "../pages/Profile";
+import AddCar from "../pages/Profile/AddCar";
 import { RedirectIfAuth, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
@@ -26,6 +27,10 @@ const router = createBrowserRouter([
           {
             path: "profile",
             Component: Profile,
+          },
+          {
+            path: "profile/cars/new",
+            Component: AddCar,
           },
         ],
       },

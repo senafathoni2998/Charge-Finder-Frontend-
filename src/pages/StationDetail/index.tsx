@@ -60,7 +60,8 @@ export default function StationDetailPage() {
   });
 
   const { id: stationId } = useParams();
-  const car = useAppSelector((state) => state.auth.car);
+  const cars = useAppSelector((state) => state.auth.cars);
+  const activeCarId = useAppSelector((state) => state.auth.activeCarId);
 
   // Demo selector for canvas. In your app, stationId will come from route params.
   //   const [stationId, setStationId] = useState("st-001");
@@ -90,10 +91,17 @@ export default function StationDetailPage() {
     return haversineKm(userCenter, { lat: station.lat, lng: station.lng });
   }, [station, userCenter]);
 
+  const activeCar = useMemo(
+    () => cars.find((c) => c.id === activeCarId) ?? null,
+    [cars, activeCarId]
+  );
+
   const isCompatible = useMemo(() => {
-    if (!car || !station || !car.connectorTypes.length) return null;
-    return station.connectors.some((c) => car.connectorTypes.includes(c.type));
-  }, [car, station]);
+    if (!activeCar || !station || !activeCar.connectorTypes.length) return null;
+    return station.connectors.some((c) =>
+      activeCar.connectorTypes.includes(c.type)
+    );
+  }, [activeCar, station]);
 
   const canStartCharging =
     station?.status === "AVAILABLE" && (isCompatible ?? true);
@@ -157,7 +165,7 @@ export default function StationDetailPage() {
               ) : station ? (
                 <Stack direction="row" spacing={1} alignItems="center">
                   <StatusChip status={station.status as Availability} />
-                  {car && car.connectorTypes.length ? (
+                  {activeCar && activeCar.connectorTypes.length ? (
                     <Chip
                       size="small"
                       label={isCompatible ? "Compatible" : "Not supported"}
@@ -361,7 +369,7 @@ export default function StationDetailPage() {
                 >
                   Start charging
                 </Button>
-                {car && isCompatible === false ? (
+                {activeCar && isCompatible === false ? (
                   <Typography variant="caption" sx={{ color: UI.text3 }}>
                     Not compatible with your car's connector types.
                   </Typography>

@@ -21,6 +21,14 @@ export default function RootLayout() {
   const showBack = location.pathname !== "/";
   const isMdUp = useAppSelector((state) => state.app.isMdMode);
   const dispatch = useAppDispatch();
+  const navTitle = (() => {
+    const path = location.pathname;
+    if (path === "/") return "ChargeFinder";
+    if (path.startsWith("/station/")) return "Station Details";
+    if (path.startsWith("/profile/cars/new")) return "Add Car";
+    if (path.startsWith("/profile")) return "Profile";
+    return "ChargeFinder";
+  })();
 
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
@@ -69,7 +77,7 @@ export default function RootLayout() {
           <Typography
             sx={{ fontWeight: 950, letterSpacing: 0.2, color: UI.text }}
           >
-            ChargeFinder
+            {navTitle}
           </Typography>
 
           <Box sx={{ flex: 1 }} />
