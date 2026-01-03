@@ -186,6 +186,7 @@ export default function ChargeFinderSignupPage() {
 
       <Box
         sx={{
+          height: { xs: "auto", md: "calc(100dvh - 65px)" },
           position: "relative",
           px: { xs: 2, md: 3 },
           py: { xs: 2.5, md: 4 },

@@ -49,8 +49,8 @@ export default function ChargeFinderLoginPage() {
   const dispatch = useAppDispatch();
   const { sendRequest, error: httpError, clearError } = useHttpClient();
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState("demo@chargefinder.app");
-  const [password, setPassword] = useState("DemoPass123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
 
@@ -229,7 +229,7 @@ export default function ChargeFinderLoginPage() {
       <Box
         sx={{
           width: "100%",
-          height: "100vh",
+          height: { xs: "auto", md: "calc(100dvh - 65px)" },
           position: "relative",
           px: { xs: 2, md: 3 },
           py: { xs: 2.5, md: 4 },
@@ -334,6 +334,7 @@ export default function ChargeFinderLoginPage() {
                   <Stack spacing={1.5}>
                     <TextField
                       label="Email"
+                      placeholder="your@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       autoComplete="email"
@@ -361,6 +362,7 @@ export default function ChargeFinderLoginPage() {
 
                     <TextField
                       label="Password"
+                      placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       autoComplete="current-password"
