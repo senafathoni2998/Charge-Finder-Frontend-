@@ -39,6 +39,7 @@ import { useAppDispatch } from "../../app/hooks";
 import { login } from "../../features/auth/authSlice";
 import useHttpClient from "../../hooks/http-hook";
 import PersonIcon from "@mui/icons-material/Person";
+import { LocationCity } from "@mui/icons-material";
 
 export default function ChargeFinderSignupPage() {
   const navigate = useNavigate();
@@ -47,6 +48,7 @@ export default function ChargeFinderSignupPage() {
   const { sendRequest, error: httpError, clearError } = useHttpClient();
 
   const [name, setName] = useState("");
+  const [region, setRegion] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -95,6 +97,7 @@ export default function ChargeFinderSignupPage() {
           email: email.trim(),
           password: password,
           name: name.trim(),
+          region: region.trim(),
         }),
         {
           "Content-Type": "application/json",
@@ -113,7 +116,13 @@ export default function ChargeFinderSignupPage() {
 
           setToast("Logged in (demo). Wire this to your API.");
 
-          dispatch(login({ email: email.trim() }));
+          dispatch(
+            login({
+              email: email.trim(),
+              name: name.trim() || null,
+              region: region.trim() || null,
+            })
+          );
           navigate(nextPath, { replace: true });
         } catch {
           // ignore
@@ -304,6 +313,34 @@ export default function ChargeFinderSignupPage() {
                         startAdornment: (
                           <InputAdornment position="start">
                             <PersonIcon sx={{ color: UI.text3 }} />
+                          </InputAdornment>
+                        ),
+                      }}
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 3,
+                          backgroundColor: "rgba(10,10,16,0.02)",
+                        },
+                      }}
+                    />
+
+                    <TextField
+                      placeholder="Your Region"
+                      label="Region"
+                      value={region}
+                      onChange={(e) => setRegion(e.target.value)}
+                      autoComplete="address-level1"
+                      fullWidth
+                      error={region.length > 0 && !isValidName(region)}
+                      helperText={
+                        region.length > 0 && !isValidName(region)
+                          ? "Please enter a valid region."
+                          : " "
+                      }
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <LocationCity sx={{ color: UI.text3 }} />
                           </InputAdornment>
                         ),
                       }}

@@ -123,9 +123,18 @@ const authSlice = createSlice({
   name: "auth",
   initialState: getInitialAuth(),
   reducers: {
-    login(state, action: PayloadAction<{ email: string }>) {
+    login(
+      state,
+      action: PayloadAction<{
+        email: string;
+        name: string | null;
+        region: string | null;
+      }>
+    ) {
       state.isAuthenticated = true;
+      state.name = action.payload.name;
       state.email = action.payload.email;
+      state.region = action.payload.region;
     },
     updateProfile(
       state,

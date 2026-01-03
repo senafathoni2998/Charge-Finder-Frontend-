@@ -139,7 +139,13 @@ export default function ChargeFinderLoginPage() {
 
           setToast("Logged in (demo). Wire this to your API.");
 
-          dispatch(login({ email: email.trim() }));
+          dispatch(
+            login({
+              email: responseData.user.email.trim(),
+              name: responseData.user.name.trim() || null,
+              region: responseData.user.region.trim() || null,
+            })
+          );
           navigate(nextPath, { replace: true });
         } catch {
           // ignore
