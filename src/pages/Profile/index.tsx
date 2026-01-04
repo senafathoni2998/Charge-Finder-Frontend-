@@ -121,21 +121,39 @@ export default function ProfilePage() {
     setProfileOpen(true);
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     const nextName = nameDraft.trim();
     const nextRegion = regionDraft.trim();
     if (!nextName) {
       setProfileError("Name is required.");
       return;
     }
-    dispatch(
-      updateProfile({
-        name: nextName,
-        region: nextRegion || null,
-      })
-    );
-    persistProfile(nextName, nextRegion || null);
-    setProfileOpen(false);
+
+    try {
+      await sendRequest(
+        `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-profile`,
+        "PATCH",
+        JSON.stringify({
+          email: email.trim(),
+          name: nextName,
+          region: nextRegion || "",
+        }),
+        {
+          "Content-Type": "application/json",
+        }
+      );
+      dispatch(
+        updateProfile({
+          name: nextName,
+          region: nextRegion || null,
+        })
+      );
+      persistProfile(nextName, nextRegion || null);
+      setProfileOpen(false);
+    } catch (err) {
+      console.error("Login error:", err);
+      // Error handled by useHttpClient
+    }
   };
 
   const handleOpenPasswordEditor = () => {
@@ -174,13 +192,6 @@ export default function ProfilePage() {
     }
 
     try {
-      console.log(
-        JSON.stringify({
-          email: email.trim(),
-          currentPassword: currentPassword,
-          newPassword: newPassword,
-        })
-      );
       const responseData = await sendRequest(
         `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-password`,
         "PATCH",
@@ -194,7 +205,6 @@ export default function ProfilePage() {
         }
       );
       // Log response and authenticate user
-      console.log("Login response:", responseData);
       setPasswordToast("Password updated.");
       // auth.login(responseData.user, responseData.user.token);
 
