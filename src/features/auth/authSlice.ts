@@ -150,6 +150,20 @@ const authSlice = createSlice({
       state.name = action.payload.name;
       state.region = action.payload.region;
     },
+    setCars(
+      state,
+      action: PayloadAction<{
+        cars: UserCar[];
+        activeCarId?: string | null;
+      }>
+    ) {
+      const sanitized = action.payload.cars
+        .map(sanitizeCar)
+        .filter(Boolean) as UserCar[];
+      const requestedActive = action.payload.activeCarId ?? state.activeCarId;
+      state.cars = sanitized;
+      state.activeCarId = ensureActiveCarId(sanitized, requestedActive);
+    },
     addCar(state, action: PayloadAction<UserCar>) {
       state.cars.push(action.payload);
       state.activeCarId = action.payload.id;
@@ -176,6 +190,13 @@ const authSlice = createSlice({
   },
 });
 
-export const { login, logout, addCar, removeCar, setActiveCar, updateProfile } =
-  authSlice.actions;
+export const {
+  login,
+  logout,
+  setCars,
+  addCar,
+  removeCar,
+  setActiveCar,
+  updateProfile,
+} = authSlice.actions;
 export default authSlice.reducer;

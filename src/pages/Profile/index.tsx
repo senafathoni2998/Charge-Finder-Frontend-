@@ -28,10 +28,10 @@ import { useLoaderData, useNavigate } from "react-router";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
-  addCar,
   logout,
   removeCar,
   setActiveCar,
+  setCars,
   updateProfile,
 } from "../../features/auth/authSlice";
 import { passwordIssue, strengthLabel, toneChipSx } from "../../utils/validate";
@@ -170,25 +170,61 @@ export default function ProfilePage() {
         console.log("Fetched profile data:", user);
         if (user && typeof user === "object") {
           const { name, region } = user as {
-            name: string | null;
-            region: string | null;
+            name?: string | null;
+            region?: string | null;
           };
-          if (!name || !region) return;
-          dispatch(
-            updateProfile({
-              name: name?.trim() || null,
-              region: region?.trim() || null,
-            })
-          );
-          persistProfile(name?.trim() || null, region?.trim() || null);
+          const nextName =
+            typeof name === "string" && name.trim() ? name.trim() : null;
+          const nextRegion =
+            typeof region === "string" && region.trim() ? region.trim() : null;
+          if (nextName || nextRegion) {
+            dispatch(
+              updateProfile({
+                name: nextName,
+                region: nextRegion,
+              })
+            );
+            persistProfile(nextName, nextRegion);
+          }
         }
 
         const { vehicles } = await sendRequest(
           `${import.meta.env.VITE_APP_BACKEND_URL}/vehicles`,
           "GET"
         );
-        dispatch(addCar(vehicles[0]));
-        console.log("Fetched vehicle data:", vehicles);
+        if (!Array.isArray(vehicles)) return;
+        console.log("Fetched vehicles data:", vehicles);
+        const remappedVehicles = vehicles
+          .map((v) => ({
+            id:
+              typeof v.id === "string"
+                ? v.id.trim()
+                : typeof v.id === "number"
+                ? String(v.id)
+                : "",
+            name:
+              typeof v.name === "string" && v.name.trim()
+                ? v.name.trim()
+                : "My EV",
+            connectorTypes: Array.isArray(v.connector_type)
+              ? v.connector_type
+              : [],
+            minKW: Number.isFinite(Number(v.min_power))
+              ? Number(v.min_power)
+              : 0,
+          }))
+          .filter((car) => car.id);
+        const nextActiveId =
+          activeCarId && remappedVehicles.some((car) => car.id === activeCarId)
+            ? activeCarId
+            : remappedVehicles[0]?.id ?? null;
+        dispatch(
+          setCars({
+            cars: remappedVehicles,
+            activeCarId: nextActiveId,
+          })
+        );
+        persistCars(remappedVehicles, nextActiveId);
       } catch (err) {
         console.error("Login error:", err);
         // Error handled by useHttpClient
