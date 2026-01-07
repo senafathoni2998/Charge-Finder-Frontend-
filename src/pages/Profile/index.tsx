@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -37,16 +37,79 @@ import {
 import { passwordIssue, strengthLabel, toneChipSx } from "../../utils/validate";
 import useHttpClient from "../../hooks/http-hook";
 
+type ProfileLoaderData = {
+  user: {
+    name?: string | null;
+    region?: string | null;
+  } | null;
+  vehicles: unknown[] | null;
+  activeCarId: string | null;
+};
+
+const fetchProfileJson = async (url: string, signal?: AbortSignal) => {
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+  if (!response.ok) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
+export async function profileLoader({ request }: { request: Request }) {
+  if (typeof window === "undefined") {
+    return { user: null, vehicles: null, activeCarId: null };
+  }
+
+  let activeCarId: string | null = null;
+  let token: string | null = null;
+  try {
+    activeCarId = window.localStorage.getItem("cf_active_car_id");
+    token = window.localStorage.getItem("cf_auth_token");
+  } catch {
+    return { user: null, vehicles: null, activeCarId: null };
+  }
+  if (!token) {
+    return { user: null, vehicles: null, activeCarId };
+  }
+
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  if (!baseUrl) {
+    return { user: null, vehicles: null, activeCarId };
+  }
+
+  const [profileData, vehiclesData] = await Promise.all([
+    fetchProfileJson(`${baseUrl}/profile`, request.signal).catch(() => null),
+    fetchProfileJson(`${baseUrl}/vehicles`, request.signal).catch(() => null),
+  ]);
+
+  const user =
+    profileData && typeof profileData === "object"
+      ? (profileData as { user?: ProfileLoaderData["user"] }).user ?? null
+      : null;
+  const vehiclesPayload =
+    vehiclesData && typeof vehiclesData === "object"
+      ? (vehiclesData as { vehicles?: unknown[] }).vehicles
+      : null;
+  const vehicles = Array.isArray(vehiclesPayload) ? vehiclesPayload : null;
+
+  return { user, vehicles, activeCarId };
+}
+
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  // const profiles = useLoaderData();
   const {
     sendRequest,
     isLoading,
     error: httpError,
     clearError,
   } = useHttpClient();
+  const loaderData = useLoaderData() as ProfileLoaderData | null;
   const email = useAppSelector((state) => state.auth.email);
   const userId = useAppSelector((state) => state.auth.userId);
   const profileName = useAppSelector((state) => state.auth.name);
@@ -89,7 +152,7 @@ export default function ProfilePage() {
     return parts[0].charAt(0).toUpperCase();
   }, [displayName]);
 
-  const persistCars = (nextCars, nextActiveId) => {
+  const persistCars = useCallback((nextCars, nextActiveId) => {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem("cf_user_cars", JSON.stringify(nextCars));
@@ -100,23 +163,23 @@ export default function ProfilePage() {
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  const persistProfile = (
-    nextName: string | null,
-    nextRegion: string | null
-  ) => {
-    if (typeof window === "undefined") return;
-    try {
-      if (nextName) window.localStorage.setItem("cf_profile_name", nextName);
-      else window.localStorage.removeItem("cf_profile_name");
-      if (nextRegion)
-        window.localStorage.setItem("cf_profile_region", nextRegion);
-      else window.localStorage.removeItem("cf_profile_region");
-    } catch {
-      // ignore
-    }
-  };
+  const persistProfile = useCallback(
+    (nextName: string | null, nextRegion: string | null) => {
+      if (typeof window === "undefined") return;
+      try {
+        if (nextName) window.localStorage.setItem("cf_profile_name", nextName);
+        else window.localStorage.removeItem("cf_profile_name");
+        if (nextRegion)
+          window.localStorage.setItem("cf_profile_region", nextRegion);
+        else window.localStorage.removeItem("cf_profile_region");
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
 
   const handleOpenProfileEditor = () => {
     setNameDraft(profileName?.trim() || displayName);
@@ -161,77 +224,54 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    async function fetchProfile() {
-      try {
-        const { user } = await sendRequest(
-          `${import.meta.env.VITE_APP_BACKEND_URL}/profile`,
-          "GET"
-        );
-        console.log("Fetched profile data:", user);
-        if (user && typeof user === "object") {
-          const { name, region } = user as {
-            name?: string | null;
-            region?: string | null;
-          };
-          const nextName =
-            typeof name === "string" && name.trim() ? name.trim() : null;
-          const nextRegion =
-            typeof region === "string" && region.trim() ? region.trim() : null;
-          if (nextName || nextRegion) {
-            dispatch(
-              updateProfile({
-                name: nextName,
-                region: nextRegion,
-              })
-            );
-            persistProfile(nextName, nextRegion);
-          }
-        }
+    if (!loaderData) return;
 
-        const { vehicles } = await sendRequest(
-          `${import.meta.env.VITE_APP_BACKEND_URL}/vehicles`,
-          "GET"
-        );
-        if (!Array.isArray(vehicles)) return;
-        console.log("Fetched vehicles data:", vehicles);
-        const remappedVehicles = vehicles
-          .map((v) => ({
-            id:
-              typeof v.id === "string"
-                ? v.id.trim()
-                : typeof v.id === "number"
-                ? String(v.id)
-                : "",
-            name:
-              typeof v.name === "string" && v.name.trim()
-                ? v.name.trim()
-                : "My EV",
-            connectorTypes: Array.isArray(v.connector_type)
-              ? v.connector_type
-              : [],
-            minKW: Number.isFinite(Number(v.min_power))
-              ? Number(v.min_power)
-              : 0,
-          }))
-          .filter((car) => car.id);
-        const nextActiveId =
-          activeCarId && remappedVehicles.some((car) => car.id === activeCarId)
-            ? activeCarId
-            : remappedVehicles[0]?.id ?? null;
+    const { user, vehicles, activeCarId: storedActiveId } = loaderData;
+    if (user && typeof user === "object") {
+      const { name, region } = user;
+      const nextName =
+        typeof name === "string" && name.trim() ? name.trim() : null;
+      const nextRegion =
+        typeof region === "string" && region.trim() ? region.trim() : null;
+      if (nextName || nextRegion) {
         dispatch(
-          setCars({
-            cars: remappedVehicles,
-            activeCarId: nextActiveId,
+          updateProfile({
+            name: nextName,
+            region: nextRegion,
           })
         );
-        persistCars(remappedVehicles, nextActiveId);
-      } catch (err) {
-        console.error("Login error:", err);
-        // Error handled by useHttpClient
+        persistProfile(nextName, nextRegion);
       }
     }
-    fetchProfile();
-  }, []);
+
+    if (!Array.isArray(vehicles)) return;
+    const remappedVehicles = vehicles
+      .map((v) => ({
+        id:
+          typeof v.id === "string"
+            ? v.id.trim()
+            : typeof v.id === "number"
+            ? String(v.id)
+            : "",
+        name:
+          typeof v.name === "string" && v.name.trim() ? v.name.trim() : "My EV",
+        connectorTypes: Array.isArray(v.connector_type) ? v.connector_type : [],
+        minKW: Number.isFinite(Number(v.min_power)) ? Number(v.min_power) : 0,
+      }))
+      .filter((car) => car.id);
+    const nextActiveId =
+      storedActiveId &&
+      remappedVehicles.some((car) => car.id === storedActiveId)
+        ? storedActiveId
+        : remappedVehicles[0]?.id ?? null;
+    dispatch(
+      setCars({
+        cars: remappedVehicles,
+        activeCarId: nextActiveId,
+      })
+    );
+    persistCars(remappedVehicles, nextActiveId);
+  }, [dispatch, loaderData, persistCars, persistProfile]);
 
   const handleOpenPasswordEditor = () => {
     setCurrentPassword("");
