@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   AppBar,
@@ -19,14 +19,20 @@ import {
   TextField,
   Toolbar,
   Typography,
-  Snackbar,
 } from "@mui/material";
 import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
-import { useNavigate, useSearchParams } from "react-router";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useNavigate,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import {
   isValidEmail,
   isValidName,
@@ -35,17 +41,129 @@ import {
   toneChipSx,
 } from "../../utils/validate";
 import { UI } from "../../theme/theme";
-import { useAppDispatch } from "../../app/hooks";
+import store from "../../app/store";
 import { login } from "../../features/auth/authSlice";
-import useHttpClient from "../../hooks/http-hook";
 import PersonIcon from "@mui/icons-material/Person";
 import { LocationCity } from "@mui/icons-material";
 
+type SignupActionData = {
+  error?: string;
+};
+
+const safeNextPath = (next: string | null): string => {
+  if (!next || !next.startsWith("/") || next.startsWith("/login")) return "/";
+  if (next.startsWith("/signup")) return "/";
+  return next;
+};
+
+export async function signupAction({ request }: { request: Request }) {
+  const formData = await request.formData();
+  const name = String(formData.get("name") || "").trim();
+  const region = String(formData.get("region") || "").trim();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const confirmPassword = String(formData.get("confirm") || "");
+  const remember = formData.get("remember") === "1";
+
+  if (!isValidEmail(email)) {
+    return { error: "Please enter a valid email address." };
+  }
+  const pwIssue = passwordIssue(password);
+  if (pwIssue) {
+    return { error: pwIssue };
+  }
+  if (password !== confirmPassword) {
+    return { error: "Passwords do not match." };
+  }
+
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  if (!baseUrl) {
+    return { error: "Backend URL is not configured." };
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/signup`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+        name,
+        region,
+      }),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    const responseData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { error: responseData.message || "Failed to sign up." };
+    }
+
+    const user = responseData.user || {};
+    const userEmail =
+      typeof user.email === "string" && user.email.trim()
+        ? user.email.trim()
+        : email;
+    const userName =
+      typeof user.name === "string" && user.name.trim()
+        ? user.name.trim()
+        : name || null;
+    const userRegion =
+      typeof user.region === "string" && user.region.trim()
+        ? user.region.trim()
+        : region || null;
+    const userId =
+      typeof user.id === "string"
+        ? user.id
+        : user.id != null
+        ? String(user.id)
+        : "";
+
+    if (typeof window !== "undefined") {
+      try {
+        if (user.token) {
+          window.localStorage.setItem("cf_auth_token", user.token);
+        }
+        if (userId) {
+          window.localStorage.setItem("cf_auth_id", userId);
+        }
+        window.localStorage.setItem("cf_auth_email", userEmail);
+        if (userRegion) {
+          window.localStorage.setItem("cf_profile_region", userRegion);
+        }
+        if (remember) {
+          window.localStorage.setItem("cf_login_email", userEmail);
+        } else {
+          window.localStorage.removeItem("cf_login_email");
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    store.dispatch(
+      login({
+        email: userEmail,
+        name: userName,
+        region: userRegion,
+        userId: userId,
+      })
+    );
+
+    const url = new URL(request.url);
+    const nextPath = safeNextPath(url.searchParams.get("next"));
+    return redirect(nextPath);
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Failed to sign up.",
+    };
+  }
+}
+
 export default function ChargeFinderSignupPage() {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
+  const actionData = useActionData() as SignupActionData | undefined;
+  const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const { sendRequest, error: httpError, clearError } = useHttpClient();
 
   const [name, setName] = useState("");
   const [region, setRegion] = useState("");
@@ -56,9 +174,7 @@ export default function ChargeFinderSignupPage() {
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   const pwIssue = useMemo(() => passwordIssue(password), [password]);
   const pwStrength = useMemo(() => strengthLabel(password), [password]);
@@ -69,74 +185,30 @@ export default function ChargeFinderSignupPage() {
     if (raw.startsWith("/signup")) return "/";
     return raw;
   }, [searchParams]);
+  const isSubmitting = navigation.state === "submitting";
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (actionData?.error) setError(actionData.error);
+  }, [actionData]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     setError(null);
 
     if (!isValidEmail(email)) {
       setError("Please enter a valid email address.");
+      e.preventDefault();
       return;
     }
     if (pwIssue) {
       setError(pwIssue);
+      e.preventDefault();
       return;
     }
     if (!passwordsMatch) {
       setError("Passwords do not match.");
+      e.preventDefault();
       return;
     }
-
-    setSubmitting(true);
-    // await new Promise((r) => setTimeout(r, 750));
-    try {
-      const responseData = await sendRequest(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/auth/signup`,
-        "POST",
-        JSON.stringify({
-          email: email.trim(),
-          password: password,
-          name: name.trim(),
-          region: region.trim(),
-        }),
-        {
-          "Content-Type": "application/json",
-        }
-      );
-      // Log response and authenticate user
-      console.log("Login response:", responseData);
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem("cf_auth_token", responseData.user.token);
-          window.localStorage.setItem("cf_auth_email", email.trim());
-          window.localStorage.setItem("cf_auth_id", responseData.user.id);
-          window.localStorage.setItem("cf_profile_region", region.trim());
-          if (remember)
-            window.localStorage.setItem("cf_login_email", email.trim());
-          else window.localStorage.removeItem("cf_login_email");
-
-          setToast("Logged in (demo). Wire this to your API.");
-
-          dispatch(
-            login({
-              email: email.trim(),
-              name: name.trim() || null,
-              region: region.trim() || null,
-              userId: responseData.user.id,
-            })
-          );
-          navigate(nextPath, { replace: true });
-        } catch {
-          // ignore
-        }
-      }
-      // auth.login(responseData.user, responseData.user.token);
-    } catch (err) {
-      console.error("Login error:", err);
-      // Error handled by useHttpClient
-    }
-    setSubmitting(false);
-    setToast("Account created (demo).");
   };
 
   return (
@@ -296,11 +368,17 @@ export default function ChargeFinderSignupPage() {
                   </Alert>
                 ) : null}
 
-                <Box component="form" onSubmit={onSubmit} noValidate>
+                <Box
+                  component={Form}
+                  method="post"
+                  onSubmit={handleSubmit}
+                  noValidate
+                >
                   <Stack spacing={1.5}>
                     <TextField
                       placeholder="Your full name"
                       label="Name"
+                      name="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       autoComplete="name"
@@ -329,6 +407,7 @@ export default function ChargeFinderSignupPage() {
                     <TextField
                       placeholder="Your Region"
                       label="Region"
+                      name="region"
                       value={region}
                       onChange={(e) => setRegion(e.target.value)}
                       autoComplete="address-level1"
@@ -357,6 +436,7 @@ export default function ChargeFinderSignupPage() {
                     <TextField
                       label="Email"
                       placeholder="name@email.com"
+                      name="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       autoComplete="email"
@@ -385,6 +465,7 @@ export default function ChargeFinderSignupPage() {
                     <TextField
                       label="Password"
                       placeholder="At least 7 characters"
+                      name="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       autoComplete="new-password"
@@ -427,6 +508,7 @@ export default function ChargeFinderSignupPage() {
                     <TextField
                       label="Confirm password"
                       placeholder="Re-enter your password"
+                      name="confirm"
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                       autoComplete="new-password"
@@ -500,6 +582,8 @@ export default function ChargeFinderSignupPage() {
                       <FormControlLabel
                         control={
                           <Checkbox
+                            name="remember"
+                            value="1"
                             checked={remember}
                             onChange={(e) => setRemember(e.target.checked)}
                             sx={{
@@ -529,7 +613,7 @@ export default function ChargeFinderSignupPage() {
                       <Button
                         type="submit"
                         variant="contained"
-                        disabled={submitting}
+                        disabled={isSubmitting}
                         sx={{
                           textTransform: "none",
                           borderRadius: 3,
@@ -540,7 +624,7 @@ export default function ChargeFinderSignupPage() {
                           boxShadow: "0 14px 40px rgba(124,92,255,0.16)",
                         }}
                       >
-                        {submitting ? "Creating..." : "Create account"}
+                        {isSubmitting ? "Creating…" : "Create account"}
                       </Button>
                     </Stack>
 
@@ -578,12 +662,6 @@ export default function ChargeFinderSignupPage() {
         </Box>
       </Box>
 
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={3200}
-        onClose={() => setToast(null)}
-        message={toast || ""}
-      />
     </Box>
   );
 }

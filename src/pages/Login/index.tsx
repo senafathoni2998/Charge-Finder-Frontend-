@@ -28,7 +28,14 @@ import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
 import GoogleIcon from "@mui/icons-material/Google";
 import AppleIcon from "@mui/icons-material/Apple";
-import { useNavigate, useSearchParams } from "react-router";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useNavigate,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import {
   isValidEmail,
   passwordIssue,
@@ -36,25 +43,128 @@ import {
   toneChipSx,
 } from "../../utils/validate";
 import { UI } from "../../theme/theme";
-import { useAppDispatch } from "../../app/hooks";
+import store from "../../app/store";
 import { login } from "../../features/auth/authSlice";
-import useHttpClient from "../../hooks/http-hook";
 
 /**
  * ChargeFinder — Login Page (Light mode)
  */
 
+type LoginActionData = {
+  error?: string;
+};
+
+const safeNextPath = (next: string | null): string => {
+  if (!next || !next.startsWith("/") || next.startsWith("/login")) return "/";
+  return next;
+};
+
+export async function loginAction({ request }: { request: Request }) {
+  const formData = await request.formData();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const remember = formData.get("remember") === "1";
+
+  if (!isValidEmail(email)) {
+    return { error: "Please enter a valid email address." };
+  }
+
+  const pwIssue = passwordIssue(password);
+  if (pwIssue) {
+    return { error: pwIssue };
+  }
+
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  if (!baseUrl) {
+    return { error: "Backend URL is not configured." };
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    const responseData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { error: responseData.message || "Failed to log in." };
+    }
+
+    const user = responseData.user || {};
+    const userEmail =
+      typeof user.email === "string" && user.email.trim()
+        ? user.email.trim()
+        : email;
+    const userName =
+      typeof user.name === "string" && user.name.trim()
+        ? user.name.trim()
+        : null;
+    const userRegion =
+      typeof user.region === "string" && user.region.trim()
+        ? user.region.trim()
+        : null;
+    const userId =
+      typeof user.id === "string"
+        ? user.id
+        : user.id != null
+        ? String(user.id)
+        : "";
+
+    if (typeof window !== "undefined") {
+      try {
+        if (user.token) {
+          window.localStorage.setItem("cf_auth_token", user.token);
+        }
+        if (userId) {
+          window.localStorage.setItem("cf_auth_id", userId);
+        }
+        window.localStorage.setItem("cf_auth_email", userEmail);
+        if (userRegion) {
+          window.localStorage.setItem("cf_profile_region", userRegion);
+        }
+        if (remember) {
+          window.localStorage.setItem("cf_login_email", userEmail);
+        } else {
+          window.localStorage.removeItem("cf_login_email");
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    store.dispatch(
+      login({
+        email: userEmail,
+        name: userName,
+        region: userRegion,
+        userId: userId,
+      })
+    );
+
+    const url = new URL(request.url);
+    const nextPath = safeNextPath(url.searchParams.get("next"));
+    return redirect(nextPath);
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Failed to log in.",
+    };
+  }
+}
+
 export default function ChargeFinderLoginPage() {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-  const { sendRequest, error: httpError, clearError } = useHttpClient();
+  const actionData = useActionData() as LoginActionData | undefined;
+  const navigation = useNavigation();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
 
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -77,8 +187,11 @@ export default function ChargeFinderLoginPage() {
     }
   }, []);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (actionData?.error) setError(actionData.error);
+  }, [actionData]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     setError(null);
 
     const emailOk = isValidEmail(email);
@@ -86,79 +199,16 @@ export default function ChargeFinderLoginPage() {
 
     if (!emailOk) {
       setError("Please enter a valid email address.");
+      e.preventDefault();
       return;
     }
     if (!pwOk) {
       setError(passwordIssue(password) || "Invalid password.");
+      e.preventDefault();
       return;
     }
-
-    setSubmitting(true);
-
-    // demo latency
-    // await new Promise((r) => setTimeout(r, 750));
-    console.log("Logging in with", { email, password, remember });
-    try {
-      const responseData = await sendRequest(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/auth/login`,
-        "POST",
-        JSON.stringify({
-          email: email.trim(),
-          password: password,
-        }),
-        {
-          "Content-Type": "application/json",
-        }
-      );
-      // Log response and authenticate user
-      console.log("Login response:", responseData);
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem("cf_auth_token", responseData.user.token);
-          window.localStorage.setItem("cf_auth_id", responseData.user.id);
-          window.localStorage.setItem("cf_auth_email", email.trim());
-          window.localStorage.setItem(
-            "cf_profile_region",
-            responseData.user.region.trim()
-          );
-          if (remember)
-            window.localStorage.setItem("cf_login_email", email.trim());
-          else window.localStorage.removeItem("cf_login_email");
-
-          setToast("Logged in (demo). Wire this to your API.");
-
-          console.log("Dispatching login for user:", responseData.user.name);
-
-          dispatch(
-            login({
-              email: responseData.user.email.trim(),
-              name: responseData.user.name.trim() || null,
-              region: responseData.user.region.trim() || null,
-              userId: responseData.user.id,
-            })
-          );
-          navigate(nextPath, { replace: true });
-        } catch {
-          // ignore
-        }
-      }
-      // auth.login(responseData.user, responseData.user.token);
-    } catch (err) {
-      console.error("Login error:", err);
-      // Error handled by useHttpClient
-    }
-
-    // demo success
-    setSubmitting(false);
   };
-
-  useEffect(() => {
-    if (httpError) {
-      setError(httpError);
-      clearError();
-      setSubmitting(false);
-    }
-  }, [httpError, clearError]);
+  const isSubmitting = navigation.state === "submitting";
 
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
@@ -327,10 +377,11 @@ export default function ChargeFinderLoginPage() {
                   </Alert>
                 ) : null}
 
-                <Box component="form" onSubmit={onSubmit} noValidate>
+                <Box component={Form} method="post" onSubmit={handleSubmit} noValidate>
                   <Stack spacing={1.5}>
                     <TextField
                       label="Email"
+                      name="email"
                       placeholder="your@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -359,6 +410,7 @@ export default function ChargeFinderLoginPage() {
 
                     <TextField
                       label="Password"
+                      name="password"
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -441,6 +493,8 @@ export default function ChargeFinderLoginPage() {
                       <FormControlLabel
                         control={
                           <Checkbox
+                            name="remember"
+                            value="1"
                             checked={remember}
                             onChange={(e) => setRemember(e.target.checked)}
                             sx={{
@@ -470,7 +524,7 @@ export default function ChargeFinderLoginPage() {
                       <Button
                         type="submit"
                         variant="contained"
-                        disabled={submitting}
+                        disabled={isSubmitting}
                         sx={{
                           textTransform: "none",
                           borderRadius: 3,
@@ -481,7 +535,7 @@ export default function ChargeFinderLoginPage() {
                           boxShadow: "0 14px 40px rgba(124,92,255,0.16)",
                         }}
                       >
-                        {submitting ? "Signing in…" : "Sign in"}
+                        {isSubmitting ? "Signing in…" : "Sign in"}
                       </Button>
                     </Stack>
 

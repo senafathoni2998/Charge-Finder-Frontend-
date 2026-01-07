@@ -2,10 +2,10 @@ import { createBrowserRouter } from "react-router";
 import App from "../pages/MainPage";
 import RootLayout from "../layout/RootLayout";
 import StationDetail from "../pages/StationDetail";
-import Login from "../pages/Login";
-import Signup from "../pages/Signup";
-import Profile, { profileLoader } from "../pages/Profile";
-import AddCar from "../pages/AddCar";
+import Login, { loginAction } from "../pages/Login";
+import Signup, { signupAction } from "../pages/Signup";
+import Profile, { profileAction, profileLoader } from "../pages/Profile";
+import AddCar, { addCarAction } from "../pages/AddCar";
 import { RedirectIfAuth, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
@@ -28,10 +28,12 @@ const router = createBrowserRouter([
             path: "profile",
             Component: Profile,
             loader: profileLoader,
+            action: profileAction,
           },
           {
             path: "profile/cars/new",
             Component: AddCar,
+            action: addCarAction,
           },
         ],
       },
@@ -44,6 +46,7 @@ const router = createBrowserRouter([
       {
         index: true,
         Component: Login,
+        action: loginAction,
       },
     ],
   },
@@ -54,6 +57,7 @@ const router = createBrowserRouter([
       {
         index: true,
         Component: Signup,
+        action: signupAction,
       },
     ],
   },

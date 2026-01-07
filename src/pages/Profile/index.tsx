@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Alert,
   Avatar,
@@ -24,9 +30,16 @@ import LockIcon from "@mui/icons-material/Lock";
 import LogoutIcon from "@mui/icons-material/Logout";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { useLoaderData, useNavigate } from "react-router";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigate,
+} from "react-router";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import store from "../../app/store";
 import {
   logout,
   removeCar,
@@ -35,7 +48,6 @@ import {
   updateProfile,
 } from "../../features/auth/authSlice";
 import { passwordIssue, strengthLabel, toneChipSx } from "../../utils/validate";
-import useHttpClient from "../../hooks/http-hook";
 
 type ProfileLoaderData = {
   user: {
@@ -44,6 +56,14 @@ type ProfileLoaderData = {
   } | null;
   vehicles: unknown[] | null;
   activeCarId: string | null;
+};
+
+type ProfileActionData = {
+  intent: "profile" | "password";
+  ok?: boolean;
+  error?: string;
+  name?: string | null;
+  region?: string | null;
 };
 
 const fetchProfileJson = async (url: string, signal?: AbortSignal) => {
@@ -100,16 +120,167 @@ export async function profileLoader({ request }: { request: Request }) {
   return { user, vehicles, activeCarId };
 }
 
+export async function profileAction({ request }: { request: Request }) {
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") || "");
+
+  if (intent === "logout") {
+    try {
+      const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+      if (baseUrl) {
+        await fetch(`${baseUrl}/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("cf_auth_token");
+        window.localStorage.removeItem("cf_auth_email");
+        window.localStorage.removeItem("cf_profile_name");
+        window.localStorage.removeItem("cf_profile_region");
+        window.localStorage.removeItem("cf_user_car");
+        window.localStorage.removeItem("cf_user_cars");
+        window.localStorage.removeItem("cf_active_car_id");
+        window.sessionStorage.setItem("cf_logout_redirect", "1");
+      } catch {
+        // ignore
+      }
+    }
+
+    store.dispatch(logout());
+    return redirect("/");
+  }
+
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  if (!baseUrl) {
+    return {
+      intent: intent === "password" ? "password" : "profile",
+      error: "Backend URL is not configured.",
+    };
+  }
+
+  let fallbackUserId = "";
+  if (typeof window !== "undefined") {
+    try {
+      fallbackUserId = window.localStorage.getItem("cf_auth_id") || "";
+    } catch {
+      fallbackUserId = "";
+    }
+  }
+  const rawUserId = String(formData.get("userId") || "").trim();
+  const userId = rawUserId || fallbackUserId;
+
+  if (intent === "profile") {
+    const name = String(formData.get("name") || "").trim();
+    const region = String(formData.get("region") || "").trim();
+    if (!name) {
+      return { intent: "profile", error: "Name is required." };
+    }
+    if (!userId) {
+      return { intent: "profile", error: "User session is missing." };
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/profile/update-profile`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          userId,
+          name,
+          region,
+        }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const responseData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return {
+          intent: "profile",
+          error: responseData.message || "Could not update profile.",
+        };
+      }
+      return {
+        intent: "profile",
+        ok: true,
+        name,
+        region: region || null,
+      };
+    } catch (err) {
+      return {
+        intent: "profile",
+        error: err instanceof Error ? err.message : "Could not update profile.",
+      };
+    }
+  }
+
+  if (intent === "password") {
+    const currentPassword = String(formData.get("currentPassword") || "");
+    const newPassword = String(formData.get("newPassword") || "");
+    const confirmPassword = String(formData.get("confirmPassword") || "");
+    if (!currentPassword.trim()) {
+      return { intent: "password", error: "Enter your current password." };
+    }
+    const issue = passwordIssue(newPassword);
+    if (issue) {
+      return { intent: "password", error: issue };
+    }
+    if (!newPassword.trim()) {
+      return { intent: "password", error: "Enter a new password." };
+    }
+    if (newPassword !== confirmPassword) {
+      return { intent: "password", error: "Passwords do not match." };
+    }
+    if (currentPassword === newPassword) {
+      return {
+        intent: "password",
+        error: "New password must be different.",
+      };
+    }
+    if (!userId) {
+      return { intent: "password", error: "User session is missing." };
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/profile/update-password`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          userId,
+          currentPassword,
+          newPassword,
+        }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const responseData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return {
+          intent: "password",
+          error: responseData.message || "Failed to update password.",
+        };
+      }
+      return { intent: "password", ok: true };
+    } catch (err) {
+      return {
+        intent: "password",
+        error:
+          err instanceof Error ? err.message : "Failed to update password.",
+      };
+    }
+  }
+
+  return { intent: "profile", error: "Unknown action." };
+}
+
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const {
-    sendRequest,
-    isLoading,
-    error: httpError,
-    clearError,
-  } = useHttpClient();
   const loaderData = useLoaderData() as ProfileLoaderData | null;
+  const actionData = useActionData() as ProfileActionData | undefined;
   const email = useAppSelector((state) => state.auth.email);
   const userId = useAppSelector((state) => state.auth.userId);
   const profileName = useAppSelector((state) => state.auth.name);
@@ -188,39 +359,14 @@ export default function ProfilePage() {
     setProfileOpen(true);
   };
 
-  const handleSaveProfile = async () => {
+  const handleProfileSubmit = (event: FormEvent) => {
     const nextName = nameDraft.trim();
-    const nextRegion = regionDraft.trim();
     if (!nextName) {
+      event.preventDefault();
       setProfileError("Name is required.");
       return;
     }
-
-    try {
-      await sendRequest(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-profile`,
-        "PATCH",
-        JSON.stringify({
-          userId: userId?.trim(),
-          name: nextName,
-          region: nextRegion || "",
-        }),
-        {
-          "Content-Type": "application/json",
-        }
-      );
-      dispatch(
-        updateProfile({
-          name: nextName,
-          region: nextRegion || null,
-        })
-      );
-      persistProfile(nextName, nextRegion || null);
-      setProfileOpen(false);
-    } catch (err) {
-      console.error("Login error:", err);
-      // Error handled by useHttpClient
-    }
+    if (profileError) setProfileError(null);
   };
 
   useEffect(() => {
@@ -246,7 +392,7 @@ export default function ProfilePage() {
 
     if (!Array.isArray(vehicles)) return;
     const remappedVehicles = vehicles
-      .map((v) => ({
+      .map((v: any) => ({
         id:
           typeof v.id === "string"
             ? v.id.trim()
@@ -273,6 +419,43 @@ export default function ProfilePage() {
     persistCars(remappedVehicles, nextActiveId);
   }, [dispatch, loaderData, persistCars, persistProfile]);
 
+  useEffect(() => {
+    if (!actionData) return;
+
+    if (actionData.intent === "profile") {
+      if (actionData.error) {
+        setProfileError(actionData.error);
+        return;
+      }
+      if (actionData.ok) {
+        dispatch(
+          updateProfile({
+            name: actionData.name ?? null,
+            region: actionData.region ?? null,
+          })
+        );
+        persistProfile(actionData.name ?? null, actionData.region ?? null);
+        setProfileOpen(false);
+        setProfileError(null);
+      }
+    }
+
+    if (actionData.intent === "password") {
+      if (actionData.error) {
+        setPasswordError(actionData.error);
+        return;
+      }
+      if (actionData.ok) {
+        setPasswordToast("Password updated.");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setPasswordOpen(false);
+        setPasswordError(null);
+      }
+    }
+  }, [actionData, dispatch, persistProfile]);
+
   const handleOpenPasswordEditor = () => {
     setCurrentPassword("");
     setNewPassword("");
@@ -284,56 +467,33 @@ export default function ProfilePage() {
     setPasswordOpen(true);
   };
 
-  const handleSavePassword = async () => {
+  const handlePasswordSubmit = (event: FormEvent) => {
     setPasswordError(null);
     if (!currentPassword.trim()) {
+      event.preventDefault();
       setPasswordError("Enter your current password.");
       return;
     }
 
     if (newPwIssue) {
+      event.preventDefault();
       setPasswordError(newPwIssue);
       return;
     }
     if (!newPassword.trim()) {
+      event.preventDefault();
       setPasswordError("Enter a new password.");
       return;
     }
     if (newPassword !== confirmPassword) {
+      event.preventDefault();
       setPasswordError("Passwords do not match.");
       return;
     }
     if (currentPassword === newPassword) {
+      event.preventDefault();
       setPasswordError("New password must be different.");
       return;
-    }
-
-    try {
-      const responseData = await sendRequest(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-password`,
-        "PATCH",
-        JSON.stringify({
-          userId: userId?.trim(),
-          currentPassword: currentPassword,
-          newPassword: newPassword,
-        }),
-        {
-          "Content-Type": "application/json",
-        }
-      );
-      // Log response and authenticate user
-      setPasswordToast("Password updated.");
-      // auth.login(responseData.user, responseData.user.token);
-
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-
-      setPasswordOpen(false);
-    } catch (err) {
-      console.error("Login error:", err);
-      setPasswordError(err.message || "Failed to update password.");
-      // Error handled by useHttpClient
     }
   };
 
@@ -348,41 +508,6 @@ export default function ProfilePage() {
       activeCarId === carId ? nextCars[0]?.id ?? null : activeCarId;
     dispatch(removeCar(carId));
     persistCars(nextCars, nextActiveId);
-  };
-
-  const handleLogout = async () => {
-    try {
-      const responseData = await sendRequest(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/auth/logout`,
-        "POST",
-        null,
-        {
-          "Content-Type": "application/json",
-        }
-      );
-      // Log response and authenticate user
-      console.log("Login response:", responseData);
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.removeItem("cf_auth_token");
-          window.localStorage.removeItem("cf_auth_email");
-          window.localStorage.removeItem("cf_profile_name");
-          window.localStorage.removeItem("cf_profile_region");
-          window.localStorage.removeItem("cf_user_car");
-          window.localStorage.removeItem("cf_user_cars");
-          window.localStorage.removeItem("cf_active_car_id");
-          window.sessionStorage.setItem("cf_logout_redirect", "1");
-        } catch {
-          // ignore
-        }
-      }
-      dispatch(logout());
-      navigate("/", { replace: true });
-      // auth.login(responseData.user, responseData.user.token);
-    } catch (err) {
-      console.error("Login error:", err);
-      // Error handled by useHttpClient
-    }
   };
 
   console.log(
@@ -540,21 +665,24 @@ export default function ProfilePage() {
                     Change password
                   </Button>
                   <Box sx={{ flex: 1 }} />
-                  <Button
-                    variant="contained"
-                    startIcon={<LogoutIcon />}
-                    onClick={handleLogout}
-                    sx={{
-                      textTransform: "none",
-                      borderRadius: 3,
-                      backgroundColor: "rgba(244,67,54,0.9)",
-                      "&:hover": {
-                        backgroundColor: "rgba(244,67,54,1)",
-                      },
-                    }}
-                  >
-                    Sign out
-                  </Button>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="logout" />
+                    <Button
+                      variant="contained"
+                      startIcon={<LogoutIcon />}
+                      type="submit"
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: 3,
+                        backgroundColor: "rgba(244,67,54,0.9)",
+                        "&:hover": {
+                          backgroundColor: "rgba(244,67,54,1)",
+                        },
+                      }}
+                    >
+                      Sign out
+                    </Button>
+                  </Form>
                 </Stack>
               </Stack>
             </CardContent>
@@ -758,29 +886,35 @@ export default function ProfilePage() {
       >
         <DialogTitle sx={{ fontWeight: 950 }}>Edit profile</DialogTitle>
         <DialogContent dividers sx={{ borderColor: UI.border2 }}>
-          <Stack spacing={2}>
-            <TextField
-              label="Full name"
-              value={nameDraft}
-              onChange={(event) => {
-                setNameDraft(event.target.value);
-                if (profileError) setProfileError(null);
-              }}
-              fullWidth
-              required
-              error={!!profileError}
-              helperText={profileError || "Shown on your profile."}
-            />
-            <TextField label="Email" value={email || ""} fullWidth disabled />
-            <TextField
-              label="Region"
-              value={regionDraft}
-              onChange={(event) => setRegionDraft(event.target.value)}
-              fullWidth
-              placeholder="Example: Jakarta, ID"
-              helperText="Used for local recommendations."
-            />
-          </Stack>
+          <Form id="profile-form" method="post" onSubmit={handleProfileSubmit}>
+            <input type="hidden" name="intent" value="profile" />
+            <input type="hidden" name="userId" value={userId?.trim() || ""} />
+            <Stack spacing={2}>
+              <TextField
+                label="Full name"
+                name="name"
+                value={nameDraft}
+                onChange={(event) => {
+                  setNameDraft(event.target.value);
+                  if (profileError) setProfileError(null);
+                }}
+                fullWidth
+                required
+                error={!!profileError}
+                helperText={profileError || "Shown on your profile."}
+              />
+              <TextField label="Email" value={email || ""} fullWidth disabled />
+              <TextField
+                label="Region"
+                name="region"
+                value={regionDraft}
+                onChange={(event) => setRegionDraft(event.target.value)}
+                fullWidth
+                placeholder="Example: Jakarta, ID"
+                helperText="Used for local recommendations."
+              />
+            </Stack>
+          </Form>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -797,7 +931,8 @@ export default function ProfilePage() {
           </Button>
           <Button
             variant="contained"
-            onClick={handleSaveProfile}
+            type="submit"
+            form="profile-form"
             sx={{
               textTransform: "none",
               borderRadius: 3,
@@ -827,163 +962,176 @@ export default function ProfilePage() {
       >
         <DialogTitle sx={{ fontWeight: 950 }}>Change password</DialogTitle>
         <DialogContent dividers sx={{ borderColor: UI.border2 }}>
-          <Stack spacing={2}>
-            {passwordError ? (
-              <Alert severity="error">{passwordError}</Alert>
-            ) : null}
-            <TextField
-              label="Current password"
-              value={currentPassword}
-              onChange={(event) => {
-                setCurrentPassword(event.target.value);
-                if (passwordError) setPasswordError(null);
-              }}
-              autoComplete="current-password"
-              fullWidth
-              type={showCurrentPw ? "text" : "password"}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LockIcon sx={{ color: UI.text3 }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowCurrentPw((v) => !v)}
-                      edge="end"
-                      aria-label={
-                        showCurrentPw ? "Hide password" : "Show password"
-                      }
-                    >
-                      {showCurrentPw ? (
-                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
-                      ) : (
-                        <VisibilityIcon sx={{ color: UI.text3 }} />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 3,
-                  backgroundColor: "rgba(10,10,16,0.02)",
-                },
-              }}
-            />
-            <TextField
-              label="New password"
-              value={newPassword}
-              onChange={(event) => {
-                setNewPassword(event.target.value);
-                if (passwordError) setPasswordError(null);
-              }}
-              autoComplete="new-password"
-              fullWidth
-              type={showNewPw ? "text" : "password"}
-              error={newPassword.length > 0 && !!newPwIssue}
-              helperText={
-                newPassword.length > 0 && newPwIssue ? newPwIssue : " "
-              }
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LockIcon sx={{ color: UI.text3 }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowNewPw((v) => !v)}
-                      edge="end"
-                      aria-label={showNewPw ? "Hide password" : "Show password"}
-                    >
-                      {showNewPw ? (
-                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
-                      ) : (
-                        <VisibilityIcon sx={{ color: UI.text3 }} />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 3,
-                  backgroundColor: "rgba(10,10,16,0.02)",
-                },
-              }}
-            />
-            <Stack direction="row" spacing={1} alignItems="center">
-              {newPassword.length > 0 ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`Strength: ${newPwStrength.label}`}
-                  sx={{
-                    borderRadius: 999,
-                    color: UI.text,
-                    fontWeight: 900,
-                    borderWidth: 1,
-                    ...toneChipSx(newPwStrength.tone),
-                  }}
-                />
+          <Form
+            id="password-form"
+            method="post"
+            onSubmit={handlePasswordSubmit}
+          >
+            <input type="hidden" name="intent" value="password" />
+            <input type="hidden" name="userId" value={userId?.trim() || ""} />
+            <Stack spacing={2}>
+              {passwordError ? (
+                <Alert severity="error">{passwordError}</Alert>
               ) : null}
-              <Typography variant="caption" sx={{ color: UI.text3 }}>
-                Use 8+ characters, letters, and numbers.
-              </Typography>
+              <TextField
+                label="Current password"
+                name="currentPassword"
+                value={currentPassword}
+                onChange={(event) => {
+                  setCurrentPassword(event.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                autoComplete="current-password"
+                fullWidth
+                type={showCurrentPw ? "text" : "password"}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockIcon sx={{ color: UI.text3 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowCurrentPw((v) => !v)}
+                        edge="end"
+                        aria-label={
+                          showCurrentPw ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showCurrentPw ? (
+                          <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                        ) : (
+                          <VisibilityIcon sx={{ color: UI.text3 }} />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    backgroundColor: "rgba(10,10,16,0.02)",
+                  },
+                }}
+              />
+              <TextField
+                label="New password"
+                name="newPassword"
+                value={newPassword}
+                onChange={(event) => {
+                  setNewPassword(event.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                autoComplete="new-password"
+                fullWidth
+                type={showNewPw ? "text" : "password"}
+                error={newPassword.length > 0 && !!newPwIssue}
+                helperText={
+                  newPassword.length > 0 && newPwIssue ? newPwIssue : " "
+                }
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockIcon sx={{ color: UI.text3 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowNewPw((v) => !v)}
+                        edge="end"
+                        aria-label={
+                          showNewPw ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showNewPw ? (
+                          <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                        ) : (
+                          <VisibilityIcon sx={{ color: UI.text3 }} />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    backgroundColor: "rgba(10,10,16,0.02)",
+                  },
+                }}
+              />
+              <Stack direction="row" spacing={1} alignItems="center">
+                {newPassword.length > 0 ? (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`Strength: ${newPwStrength.label}`}
+                    sx={{
+                      borderRadius: 999,
+                      color: UI.text,
+                      fontWeight: 900,
+                      borderWidth: 1,
+                      ...toneChipSx(newPwStrength.tone),
+                    }}
+                  />
+                ) : null}
+                <Typography variant="caption" sx={{ color: UI.text3 }}>
+                  Use 8+ characters, letters, and numbers.
+                </Typography>
+              </Stack>
+              <TextField
+                label="Confirm new password"
+                name="confirmPassword"
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                autoComplete="new-password"
+                fullWidth
+                type={showConfirmPw ? "text" : "password"}
+                error={
+                  confirmPassword.length > 0 && confirmPassword !== newPassword
+                }
+                helperText={
+                  confirmPassword.length > 0 && confirmPassword !== newPassword
+                    ? "Passwords do not match."
+                    : " "
+                }
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockIcon sx={{ color: UI.text3 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowConfirmPw((v) => !v)}
+                        edge="end"
+                        aria-label={
+                          showConfirmPw ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showConfirmPw ? (
+                          <VisibilityOffIcon sx={{ color: UI.text3 }} />
+                        ) : (
+                          <VisibilityIcon sx={{ color: UI.text3 }} />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    backgroundColor: "rgba(10,10,16,0.02)",
+                  },
+                }}
+              />
             </Stack>
-            <TextField
-              label="Confirm new password"
-              value={confirmPassword}
-              onChange={(event) => {
-                setConfirmPassword(event.target.value);
-                if (passwordError) setPasswordError(null);
-              }}
-              autoComplete="new-password"
-              fullWidth
-              type={showConfirmPw ? "text" : "password"}
-              error={
-                confirmPassword.length > 0 && confirmPassword !== newPassword
-              }
-              helperText={
-                confirmPassword.length > 0 && confirmPassword !== newPassword
-                  ? "Passwords do not match."
-                  : " "
-              }
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <LockIcon sx={{ color: UI.text3 }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowConfirmPw((v) => !v)}
-                      edge="end"
-                      aria-label={
-                        showConfirmPw ? "Hide password" : "Show password"
-                      }
-                    >
-                      {showConfirmPw ? (
-                        <VisibilityOffIcon sx={{ color: UI.text3 }} />
-                      ) : (
-                        <VisibilityIcon sx={{ color: UI.text3 }} />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 3,
-                  backgroundColor: "rgba(10,10,16,0.02)",
-                },
-              }}
-            />
-          </Stack>
+          </Form>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -1000,7 +1148,8 @@ export default function ProfilePage() {
           </Button>
           <Button
             variant="contained"
-            onClick={handleSavePassword}
+            type="submit"
+            form="password-form"
             sx={{
               textTransform: "none",
               borderRadius: 3,
