@@ -77,7 +77,7 @@ export default function AddCarPage() {
           "Content-Type": "application/json",
         }
       );
-      console.log("Vehicle updated:", vehicle);
+      
       const nextCar = {
         id: vehicle.id,
         name: trimmedName,

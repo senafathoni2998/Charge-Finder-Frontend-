@@ -115,6 +115,7 @@ export default function ChargeFinderLoginPage() {
       if (typeof window !== "undefined") {
         try {
           window.localStorage.setItem("cf_auth_token", responseData.user.token);
+          window.localStorage.setItem("cf_auth_id", responseData.user.id);
           window.localStorage.setItem("cf_auth_email", email.trim());
           window.localStorage.setItem(
             "cf_profile_region",
@@ -126,11 +127,14 @@ export default function ChargeFinderLoginPage() {
 
           setToast("Logged in (demo). Wire this to your API.");
 
+          console.log("Dispatching login for user:", responseData.user.name);
+
           dispatch(
             login({
               email: responseData.user.email.trim(),
               name: responseData.user.name.trim() || null,
               region: responseData.user.region.trim() || null,
+              userId: responseData.user.id,
             })
           );
           navigate(nextPath, { replace: true });

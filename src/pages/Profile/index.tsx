@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Avatar,
@@ -24,10 +24,11 @@ import LockIcon from "@mui/icons-material/Lock";
 import LogoutIcon from "@mui/icons-material/Logout";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { useNavigate } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
+  addCar,
   logout,
   removeCar,
   setActiveCar,
@@ -39,6 +40,7 @@ import useHttpClient from "../../hooks/http-hook";
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  // const profiles = useLoaderData();
   const {
     sendRequest,
     isLoading,
@@ -46,6 +48,7 @@ export default function ProfilePage() {
     clearError,
   } = useHttpClient();
   const email = useAppSelector((state) => state.auth.email);
+  const userId = useAppSelector((state) => state.auth.userId);
   const profileName = useAppSelector((state) => state.auth.name);
   const profileRegion = useAppSelector((state) => state.auth.region);
   const cars = useAppSelector((state) => state.auth.cars);
@@ -71,6 +74,7 @@ export default function ProfilePage() {
   );
 
   const displayName = useMemo(() => {
+    console.log("profileName:", profileName);
     if (profileName && profileName.trim()) return profileName.trim();
     if (!email) return "Driver";
     const [name] = email.split("@");
@@ -134,7 +138,7 @@ export default function ProfilePage() {
         `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-profile`,
         "PATCH",
         JSON.stringify({
-          email: email.trim(),
+          userId: userId?.trim(),
           name: nextName,
           region: nextRegion || "",
         }),
@@ -155,6 +159,43 @@ export default function ProfilePage() {
       // Error handled by useHttpClient
     }
   };
+
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        const { user } = await sendRequest(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/profile`,
+          "GET"
+        );
+        console.log("Fetched profile data:", user);
+        if (user && typeof user === "object") {
+          const { name, region } = user as {
+            name: string | null;
+            region: string | null;
+          };
+          if (!name || !region) return;
+          dispatch(
+            updateProfile({
+              name: name?.trim() || null,
+              region: region?.trim() || null,
+            })
+          );
+          persistProfile(name?.trim() || null, region?.trim() || null);
+        }
+
+        const { vehicles } = await sendRequest(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/vehicles`,
+          "GET"
+        );
+        dispatch(addCar(vehicles[0]));
+        console.log("Fetched vehicle data:", vehicles);
+      } catch (err) {
+        console.error("Login error:", err);
+        // Error handled by useHttpClient
+      }
+    }
+    fetchProfile();
+  }, []);
 
   const handleOpenPasswordEditor = () => {
     setCurrentPassword("");
@@ -196,7 +237,7 @@ export default function ProfilePage() {
         `${import.meta.env.VITE_APP_BACKEND_URL}/profile/update-password`,
         "PATCH",
         JSON.stringify({
-          email: email.trim(),
+          userId: userId?.trim(),
           currentPassword: currentPassword,
           newPassword: newPassword,
         }),
@@ -267,6 +308,13 @@ export default function ProfilePage() {
       // Error handled by useHttpClient
     }
   };
+
+  console.log(
+    "Rendering ProfilePage with cars:",
+    cars,
+    "activeCarId:",
+    activeCarId
+  );
 
   return (
     <Box
@@ -479,10 +527,11 @@ export default function ProfilePage() {
                   </Stack>
                 </Box>
 
-                {cars.length ? (
+                {cars?.length ? (
                   <Stack spacing={1.5}>
-                    {cars.map((car) => {
+                    {cars?.map((car) => {
                       const isActive = car.id === activeCarId;
+                      console.log("Rendering car:", car, "isActive:", isActive);
                       return (
                         <Box
                           key={car.id}
@@ -558,7 +607,7 @@ export default function ProfilePage() {
                               spacing={1}
                               sx={{ flexWrap: "wrap" }}
                             >
-                              {car.connectorTypes.map((c) => (
+                              {car.connectorTypes?.map((c) => (
                                 <Chip
                                   key={c}
                                   size="small"
@@ -572,7 +621,7 @@ export default function ProfilePage() {
                                   }}
                                 />
                               ))}
-                              {!car.connectorTypes.length ? (
+                              {!car.connectorTypes?.length ? (
                                 <Typography
                                   variant="caption"
                                   sx={{ color: UI.text3 }}

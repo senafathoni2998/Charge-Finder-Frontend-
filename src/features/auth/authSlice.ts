@@ -4,6 +4,7 @@ import type { ConnectorType } from "../../models/model";
 type AuthState = {
   isAuthenticated: boolean;
   email: string | null;
+  userId: string | null;
   name: string | null;
   region: string | null;
   cars: UserCar[];
@@ -81,6 +82,7 @@ const getInitialAuth = (): AuthState => {
     return {
       isAuthenticated: false,
       email: null,
+      userId: null,
       name: null,
       region: null,
       cars: [],
@@ -90,6 +92,7 @@ const getInitialAuth = (): AuthState => {
   try {
     const token = window.localStorage.getItem("cf_auth_token");
     const email = window.localStorage.getItem("cf_auth_email");
+    const userId = window.localStorage.getItem("cf_auth_id");
     const name = window.localStorage.getItem("cf_profile_name");
     const region = window.localStorage.getItem("cf_profile_region");
     const cars = parseCars(window.localStorage.getItem("cf_user_cars"));
@@ -102,6 +105,7 @@ const getInitialAuth = (): AuthState => {
     return {
       isAuthenticated: !!token,
       email: email ?? null,
+      userId: userId ?? null,
       name: name && name.trim() ? name.trim() : null,
       region: region && region.trim() ? region.trim() : null,
       cars: mergedCars,
@@ -112,6 +116,7 @@ const getInitialAuth = (): AuthState => {
       isAuthenticated: false,
       email: null,
       name: null,
+      userId: null,
       region: null,
       cars: [],
       activeCarId: null,
@@ -126,12 +131,14 @@ const authSlice = createSlice({
     login(
       state,
       action: PayloadAction<{
+        userId: string;
         email: string;
         name: string | null;
         region: string | null;
       }>
     ) {
       state.isAuthenticated = true;
+      state.userId = action.payload.userId;
       state.name = action.payload.name;
       state.email = action.payload.email;
       state.region = action.payload.region;
@@ -160,6 +167,7 @@ const authSlice = createSlice({
     logout(state) {
       state.isAuthenticated = false;
       state.email = null;
+      state.userId = null;
       state.name = null;
       state.region = null;
       state.cars = [];

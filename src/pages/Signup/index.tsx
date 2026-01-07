@@ -109,6 +109,7 @@ export default function ChargeFinderSignupPage() {
         try {
           window.localStorage.setItem("cf_auth_token", responseData.user.token);
           window.localStorage.setItem("cf_auth_email", email.trim());
+          window.localStorage.setItem("cf_auth_id", responseData.user.id);
           window.localStorage.setItem("cf_profile_region", region.trim());
           if (remember)
             window.localStorage.setItem("cf_login_email", email.trim());
@@ -121,6 +122,7 @@ export default function ChargeFinderSignupPage() {
               email: email.trim(),
               name: name.trim() || null,
               region: region.trim() || null,
+              userId: responseData.user.id,
             })
           );
           navigate(nextPath, { replace: true });
