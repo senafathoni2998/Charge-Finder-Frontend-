@@ -23,7 +23,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import type { Station } from "../../models/model";
 import { fetchStations } from "../../api/stations";
-import { fetchUsers } from "../../api/users";
+import { fetchUsers, patchUser } from "../../api/users";
 import { UI } from "../../theme/theme";
 import { minutesAgo } from "../../utils/time";
 
@@ -167,6 +167,18 @@ const normalizeAdminUser = (data: unknown): AdminUser | null => {
   };
 };
 
+const nextStatusForUser = (status: AdminUser["status"]) => {
+  if (status === "active") return "suspended";
+  if (status === "suspended") return "active";
+  return "active";
+};
+
+const userActionLabel = (status: AdminUser["status"]) => {
+  if (status === "active") return "Suspend";
+  if (status === "suspended") return "Activate";
+  return "Approve";
+};
+
 const statusChipStyles = (status: string) => {
   switch (status) {
     case "AVAILABLE":
@@ -278,6 +290,10 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersUpdating, setUsersUpdating] = useState<
+    Record<string, boolean>
+  >({});
+  const [userActionError, setUserActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -303,6 +319,33 @@ export default function AdminPage() {
       controller.abort();
     };
   }, []);
+
+  const handleUserStatusAction = async (user: AdminUser) => {
+    const nextStatus = nextStatusForUser(user.status);
+    setUserActionError(null);
+    setUsersUpdating((prev) => ({ ...prev, [user.id]: true }));
+
+    const result = await patchUser({
+      userId: user.id,
+      data: { status: nextStatus },
+    });
+
+    if (!result.ok) {
+      setUserActionError(result.error || "Could not update user.");
+      setUsersUpdating((prev) => ({ ...prev, [user.id]: false }));
+      return;
+    }
+
+    const normalized = result.user ? normalizeAdminUser(result.user) : null;
+    setUsers((prev) =>
+      prev.map((existing) => {
+        if (existing.id !== user.id) return existing;
+        if (normalized) return normalized;
+        return { ...existing, status: nextStatus, lastActive: "Just now" };
+      })
+    );
+    setUsersUpdating((prev) => ({ ...prev, [user.id]: false }));
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -804,6 +847,12 @@ export default function AdminPage() {
                       }}
                     />
 
+                    {userActionError ? (
+                      <Typography sx={{ color: "rgba(244,67,54,0.9)", fontSize: 13 }}>
+                        {userActionError}
+                      </Typography>
+                    ) : null}
+
                     <Stack spacing={2}>
                       {usersLoading ? (
                         <Typography sx={{ color: UI.text2, fontSize: 14 }}>
@@ -864,6 +913,8 @@ export default function AdminPage() {
                                 <Button
                                   variant="outlined"
                                   size="small"
+                                  onClick={() => handleUserStatusAction(user)}
+                                  disabled={!!usersUpdating[user.id]}
                                   sx={{
                                     textTransform: "none",
                                     borderRadius: 3,
@@ -871,7 +922,7 @@ export default function AdminPage() {
                                     color: UI.text,
                                   }}
                                 >
-                                  Manage
+                                  {userActionLabel(user.status)}
                                 </Button>
                                 <IconButton
                                   sx={{
