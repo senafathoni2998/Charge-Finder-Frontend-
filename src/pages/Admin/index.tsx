@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -21,8 +21,10 @@ import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
+import type { Station } from "../../models/model";
+import { fetchStations } from "../../api/stations";
+import { fetchUsers } from "../../api/users";
 import { UI } from "../../theme/theme";
-import { MOCK_STATIONS } from "../../data/stations";
 import { minutesAgo } from "../../utils/time";
 
 type AdminUser = {
@@ -40,41 +42,6 @@ type AdminQueueItem = {
   detail: string;
   priority: "high" | "medium" | "low";
 };
-
-const adminUsers: AdminUser[] = [
-  {
-    id: "usr-100",
-    name: "Nadia Putri",
-    email: "nadia@chargefinder.app",
-    role: "admin",
-    status: "active",
-    lastActive: "2m ago",
-  },
-  {
-    id: "usr-101",
-    name: "Rafi Ahmad",
-    email: "rafi@chargefinder.app",
-    role: "operator",
-    status: "active",
-    lastActive: "18m ago",
-  },
-  {
-    id: "usr-102",
-    name: "Maya Putra",
-    email: "maya@chargefinder.app",
-    role: "support",
-    status: "pending",
-    lastActive: "Invite sent",
-  },
-  {
-    id: "usr-103",
-    name: "Dimas Yusuf",
-    email: "dimas@chargefinder.app",
-    role: "viewer",
-    status: "suspended",
-    lastActive: "3d ago",
-  },
-];
 
 const adminQueue: AdminQueueItem[] = [
   {
@@ -96,6 +63,109 @@ const adminQueue: AdminQueueItem[] = [
     priority: "low",
   },
 ];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object";
+
+const toCleanString = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+};
+
+const normalizeRoleValue = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === "string");
+    return first ? first.trim().toLowerCase() : "";
+  }
+  if (typeof value === "string") return value.trim().toLowerCase();
+  return "";
+};
+
+const formatNameFromEmail = (email: string) => {
+  const [prefix] = email.split("@");
+  const cleaned = prefix.replace(/[^a-zA-Z0-9]+/g, " ").trim();
+  return cleaned || "User";
+};
+
+const formatLastActive = (value: unknown): string => {
+  if (typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${minutesAgo(parsed.toISOString())}m ago`;
+    }
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "N/A";
+    const parsed = Date.parse(trimmed);
+    if (!Number.isNaN(parsed)) {
+      return `${minutesAgo(new Date(parsed).toISOString())}m ago`;
+    }
+    return trimmed;
+  }
+  return "N/A";
+};
+
+const normalizeUserStatus = (raw: Record<string, unknown>): AdminUser["status"] => {
+  const statusValue = raw.status ?? raw.state;
+  if (typeof statusValue === "string") {
+    const normalized = statusValue.trim().toLowerCase();
+    if (normalized === "active" || normalized === "enabled") return "active";
+    if (normalized === "pending" || normalized === "invited") return "pending";
+    if (
+      normalized === "suspended" ||
+      normalized === "blocked" ||
+      normalized === "disabled"
+    )
+      return "suspended";
+  }
+  if (typeof statusValue === "boolean") {
+    return statusValue ? "active" : "suspended";
+  }
+  const isActive = raw.is_active ?? raw.active ?? raw.isActive;
+  if (typeof isActive === "boolean") {
+    return isActive ? "active" : "suspended";
+  }
+  const isSuspended =
+    raw.suspended ?? raw.isSuspended ?? raw.disabled ?? raw.isDisabled;
+  if (typeof isSuspended === "boolean") {
+    return isSuspended ? "suspended" : "active";
+  }
+  return "active";
+};
+
+const normalizeAdminUser = (data: unknown): AdminUser | null => {
+  if (!isRecord(data)) return null;
+  const id = toCleanString(data.id ?? data.userId ?? data._id);
+  if (!id) return null;
+  const email = toCleanString(data.email ?? data.mail ?? data.userEmail);
+  const name = toCleanString(
+    data.name ?? data.fullName ?? data.displayName ?? data.username
+  );
+  const role = normalizeRoleValue(data.role ?? data.roles ?? data.userRole) || "user";
+  const status = normalizeUserStatus(data);
+  const lastActive = formatLastActive(
+    data.lastActive ??
+      data.last_active ??
+      data.lastLogin ??
+      data.last_login ??
+      data.lastSeen ??
+      data.updatedAt ??
+      data.updated_at
+  );
+  const finalEmail = email || "unknown@chargefinder.app";
+  const finalName = name || formatNameFromEmail(finalEmail);
+
+  return {
+    id,
+    name: finalName,
+    email: finalEmail,
+    role,
+    status,
+    lastActive,
+  };
+};
 
 const statusChipStyles = (status: string) => {
   switch (status) {
@@ -202,7 +272,65 @@ const queuePriorityStyles = (priority: AdminQueueItem["priority"]) => {
 };
 
 export default function AdminPage() {
-  const stations = MOCK_STATIONS;
+  const [stations, setStations] = useState<Station[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(true);
+  const [stationsError, setStationsError] = useState<string | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    const loadStations = async () => {
+      setStationsLoading(true);
+      setStationsError(null);
+      const result = await fetchStations(controller.signal);
+      if (!active) return;
+      if (result.ok) {
+        setStations(result.stations);
+      } else {
+        setStations([]);
+        setStationsError(result.error || "Could not load stations.");
+      }
+      setStationsLoading(false);
+    };
+
+    loadStations();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    const loadUsers = async () => {
+      setUsersLoading(true);
+      setUsersError(null);
+      const result = await fetchUsers(controller.signal);
+      if (!active) return;
+      if (result.ok) {
+        const normalized = result.users
+          .map(normalizeAdminUser)
+          .filter(Boolean) as AdminUser[];
+        setUsers(normalized);
+      } else {
+        setUsers([]);
+        setUsersError(result.error || "Could not load users.");
+      }
+      setUsersLoading(false);
+    };
+
+    loadUsers();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const totalStations = stations.length;
@@ -210,9 +338,9 @@ export default function AdminPage() {
       .length;
     const offlineStations = stations.filter((s) => s.status === "OFFLINE")
       .length;
-    const totalUsers = adminUsers.length;
-    const activeUsers = adminUsers.filter((u) => u.status === "active").length;
-    const adminCount = adminUsers.filter((u) => u.role === "admin").length;
+    const totalUsers = users.length;
+    const activeUsers = users.filter((u) => u.status === "active").length;
+    const adminCount = users.filter((u) => u.role === "admin").length;
     return [
       {
         label: "Stations",
@@ -239,7 +367,7 @@ export default function AdminPage() {
         icon: <VerifiedUserIcon fontSize="small" />,
       },
     ];
-  }, [stations]);
+  }, [stations, users]);
 
   return (
     <Box
@@ -501,111 +629,123 @@ export default function AdminPage() {
                   />
 
                   <Stack spacing={2}>
-                    {stations.map((station) => {
-                      const totalPorts = station.connectors.reduce(
-                        (sum, c) => sum + c.ports,
-                        0
-                      );
-                      const availablePorts = station.connectors.reduce(
-                        (sum, c) => sum + c.availablePorts,
-                        0
-                      );
-                      const connectorLabels = station.connectors
-                        .map((c) => c.type)
-                        .join(", ");
-                      return (
-                        <Box key={station.id}>
-                          <Stack
-                            direction={{ xs: "column", md: "row" }}
-                            spacing={1.5}
-                            alignItems={{ md: "center" }}
-                          >
-                            <Box sx={{ minWidth: 0 }}>
-                              <Typography
-                                sx={{
-                                  fontWeight: 800,
-                                  color: UI.text,
-                                  fontSize: 16,
-                                }}
-                              >
-                                {station.name}
-                              </Typography>
-                              <Typography sx={{ color: UI.text2, fontSize: 13 }}>
-                                {station.address}
-                              </Typography>
+                    {stationsLoading ? (
+                      <Typography sx={{ color: UI.text2, fontSize: 14 }}>
+                        Loading stations\u2026
+                      </Typography>
+                    ) : stations.length ? (
+                      stations.map((station) => {
+                        const totalPorts = station.connectors.reduce(
+                          (sum, c) => sum + c.ports,
+                          0
+                        );
+                        const availablePorts = station.connectors.reduce(
+                          (sum, c) => sum + c.availablePorts,
+                          0
+                        );
+                        const connectorLabels = station.connectors
+                          .map((c) => c.type)
+                          .join(", ");
+                        return (
+                          <Box key={station.id}>
+                            <Stack
+                              direction={{ xs: "column", md: "row" }}
+                              spacing={1.5}
+                              alignItems={{ md: "center" }}
+                            >
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                  sx={{
+                                    fontWeight: 800,
+                                    color: UI.text,
+                                    fontSize: 16,
+                                  }}
+                                >
+                                  {station.name}
+                                </Typography>
+                                <Typography
+                                  sx={{ color: UI.text2, fontSize: 13 }}
+                                >
+                                  {station.address}
+                                </Typography>
+                                <Stack
+                                  direction="row"
+                                  spacing={1}
+                                  alignItems="center"
+                                  flexWrap="wrap"
+                                  sx={{ mt: 0.5 }}
+                                >
+                                  <Chip
+                                    label={`${availablePorts}/${totalPorts} ports`}
+                                    size="small"
+                                    sx={{
+                                      borderRadius: 999,
+                                      backgroundColor: "rgba(10,10,16,0.05)",
+                                      border: `1px solid ${UI.border2}`,
+                                      color: UI.text,
+                                    }}
+                                  />
+                                  <Typography
+                                    sx={{ color: UI.text3, fontSize: 12 }}
+                                  >
+                                    {connectorLabels}
+                                  </Typography>
+                                  <Typography
+                                    sx={{ color: UI.text3, fontSize: 12 }}
+                                  >
+                                    Updated {minutesAgo(station.lastUpdatedISO)}m
+                                    ago
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                              <Box sx={{ flex: 1 }} />
                               <Stack
                                 direction="row"
                                 spacing={1}
                                 alignItems="center"
                                 flexWrap="wrap"
-                                sx={{ mt: 0.5 }}
                               >
                                 <Chip
-                                  label={`${availablePorts}/${totalPorts} ports`}
+                                  label={station.status}
                                   size="small"
                                   sx={{
                                     borderRadius: 999,
-                                    backgroundColor: "rgba(10,10,16,0.05)",
-                                    border: `1px solid ${UI.border2}`,
-                                    color: UI.text,
+                                    fontWeight: 700,
+                                    ...statusChipStyles(station.status),
                                   }}
                                 />
-                                <Typography
-                                  sx={{ color: UI.text3, fontSize: 12 }}
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  sx={{
+                                    textTransform: "none",
+                                    borderRadius: 3,
+                                    borderColor: UI.border2,
+                                    color: UI.text,
+                                  }}
                                 >
-                                  {connectorLabels}
-                                </Typography>
-                                <Typography
-                                  sx={{ color: UI.text3, fontSize: 12 }}
+                                  Edit
+                                </Button>
+                                <IconButton
+                                  sx={{
+                                    borderRadius: 2.5,
+                                    border: `1px solid ${UI.border2}`,
+                                  }}
+                                  aria-label="Station actions"
                                 >
-                                  Updated {minutesAgo(station.lastUpdatedISO)}m
-                                  ago
-                                </Typography>
+                                  <MoreVertIcon fontSize="small" />
+                                </IconButton>
                               </Stack>
-                            </Box>
-                            <Box sx={{ flex: 1 }} />
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              alignItems="center"
-                              flexWrap="wrap"
-                            >
-                              <Chip
-                                label={station.status}
-                                size="small"
-                                sx={{
-                                  borderRadius: 999,
-                                  fontWeight: 700,
-                                  ...statusChipStyles(station.status),
-                                }}
-                              />
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{
-                                  textTransform: "none",
-                                  borderRadius: 3,
-                                  borderColor: UI.border2,
-                                  color: UI.text,
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <IconButton
-                                sx={{
-                                  borderRadius: 2.5,
-                                  border: `1px solid ${UI.border2}`,
-                                }}
-                                aria-label="Station actions"
-                              >
-                                <MoreVertIcon fontSize="small" />
-                              </IconButton>
                             </Stack>
-                          </Stack>
-                          <Divider sx={{ my: 2, borderColor: UI.border2 }} />
-                        </Box>
-                      );
-                    })}
+                            <Divider sx={{ my: 2, borderColor: UI.border2 }} />
+                          </Box>
+                        );
+                      })
+                    ) : (
+                      <Typography sx={{ color: UI.text2, fontSize: 14 }}>
+                        {stationsError || "No stations found."}
+                      </Typography>
+                    )}
                   </Stack>
                 </Stack>
               </CardContent>
@@ -665,83 +805,93 @@ export default function AdminPage() {
                     />
 
                     <Stack spacing={2}>
-                      {adminUsers.map((user) => (
-                        <Box key={user.id}>
-                          <Stack
-                            direction={{ xs: "column", md: "row" }}
-                            spacing={1.5}
-                            alignItems={{ md: "center" }}
-                          >
-                            <Box sx={{ minWidth: 0 }}>
-                              <Typography
-                                sx={{
-                                  fontWeight: 800,
-                                  color: UI.text,
-                                  fontSize: 15,
-                                }}
-                              >
-                                {user.name}
-                              </Typography>
-                              <Typography sx={{ color: UI.text2, fontSize: 13 }}>
-                                {user.email}
-                              </Typography>
-                              <Typography sx={{ color: UI.text3, fontSize: 12 }}>
-                                Last active: {user.lastActive}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ flex: 1 }} />
+                      {usersLoading ? (
+                        <Typography sx={{ color: UI.text2, fontSize: 14 }}>
+                          Loading users...
+                        </Typography>
+                      ) : users.length ? (
+                        users.map((user) => (
+                          <Box key={user.id}>
                             <Stack
-                              direction="row"
-                              spacing={1}
-                              alignItems="center"
-                              flexWrap="wrap"
+                              direction={{ xs: "column", md: "row" }}
+                              spacing={1.5}
+                              alignItems={{ md: "center" }}
                             >
-                              <Chip
-                                label={user.role}
-                                size="small"
-                                sx={{
-                                  borderRadius: 999,
-                                  fontWeight: 700,
-                                  textTransform: "capitalize",
-                                  ...roleChipStyles(user.role),
-                                }}
-                              />
-                              <Chip
-                                label={user.status}
-                                size="small"
-                                sx={{
-                                  borderRadius: 999,
-                                  fontWeight: 700,
-                                  textTransform: "capitalize",
-                                  ...userStatusChipStyles(user.status),
-                                }}
-                              />
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{
-                                  textTransform: "none",
-                                  borderRadius: 3,
-                                  borderColor: UI.border2,
-                                  color: UI.text,
-                                }}
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                  sx={{
+                                    fontWeight: 800,
+                                    color: UI.text,
+                                    fontSize: 15,
+                                  }}
+                                >
+                                  {user.name}
+                                </Typography>
+                                <Typography sx={{ color: UI.text2, fontSize: 13 }}>
+                                  {user.email}
+                                </Typography>
+                                <Typography sx={{ color: UI.text3, fontSize: 12 }}>
+                                  Last active: {user.lastActive}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ flex: 1 }} />
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="center"
+                                flexWrap="wrap"
                               >
-                                Manage
-                              </Button>
-                              <IconButton
-                                sx={{
-                                  borderRadius: 2.5,
-                                  border: `1px solid ${UI.border2}`,
-                                }}
-                                aria-label="User actions"
-                              >
-                                <MoreVertIcon fontSize="small" />
-                              </IconButton>
+                                <Chip
+                                  label={user.role}
+                                  size="small"
+                                  sx={{
+                                    borderRadius: 999,
+                                    fontWeight: 700,
+                                    textTransform: "capitalize",
+                                    ...roleChipStyles(user.role),
+                                  }}
+                                />
+                                <Chip
+                                  label={user.status}
+                                  size="small"
+                                  sx={{
+                                    borderRadius: 999,
+                                    fontWeight: 700,
+                                    textTransform: "capitalize",
+                                    ...userStatusChipStyles(user.status),
+                                  }}
+                                />
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  sx={{
+                                    textTransform: "none",
+                                    borderRadius: 3,
+                                    borderColor: UI.border2,
+                                    color: UI.text,
+                                  }}
+                                >
+                                  Manage
+                                </Button>
+                                <IconButton
+                                  sx={{
+                                    borderRadius: 2.5,
+                                    border: `1px solid ${UI.border2}`,
+                                  }}
+                                  aria-label="User actions"
+                                >
+                                  <MoreVertIcon fontSize="small" />
+                                </IconButton>
+                              </Stack>
                             </Stack>
-                          </Stack>
-                          <Divider sx={{ my: 2, borderColor: UI.border2 }} />
-                        </Box>
-                      ))}
+                            <Divider sx={{ my: 2, borderColor: UI.border2 }} />
+                          </Box>
+                        ))
+                      ) : (
+                        <Typography sx={{ color: UI.text2, fontSize: 14 }}>
+                          {usersError || "No users found."}
+                        </Typography>
+                      )}
                     </Stack>
                   </Stack>
                 </CardContent>

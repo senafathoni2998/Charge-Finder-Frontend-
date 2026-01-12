@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 // NOTE: This page uses react-router for navigation in the full app.
 import { Box, Drawer, useMediaQuery } from "@mui/material";
 import { useLocation, useNavigate } from "react-router";
-import { DRAWER_WIDTH, MOCK_STATIONS, fetchStations } from "../../data/stations";
+import { fetchStations } from "../../api/stations";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setMdMode, setSidebarOpen } from "../../features/app/appSlice";
@@ -13,6 +13,7 @@ import type { ConnectorType } from "../../models/model";
 import type { FilterStatus, Station, StationWithDistance } from "./types";
 import { persistActiveCarId } from "./mainPageStorage";
 import { buildMapsUrl } from "./utils";
+import { DRAWER_WIDTH } from "./constants";
 import FiltersPanel from "./components/FiltersPanel";
 import MapPanel from "./components/MapPanel";
 
@@ -31,7 +32,7 @@ export default function MainPage() {
   const [useCarFilter, setUseCarFilter] = useState(false);
   const [carFilterTouched, setCarFilterTouched] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [stations, setStations] = useState<Station[]>(MOCK_STATIONS);
+  const [stations, setStations] = useState<Station[]>([]);
 
   const drawerOpen = useAppSelector((state) => state.app.isSidebarOpen);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
@@ -55,9 +56,7 @@ export default function MainPage() {
     const loadStations = async () => {
       const result = await fetchStations(controller.signal);
       if (!active) return;
-      if (result.ok && result.stations.length) {
-        setStations(result.stations);
-      }
+      setStations(result.ok ? result.stations : []);
     };
 
     loadStations();

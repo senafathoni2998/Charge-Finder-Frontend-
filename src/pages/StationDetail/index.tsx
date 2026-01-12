@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, Stack, useMediaQuery } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Stack,
+  Typography,
+  useMediaQuery,
+} from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { UI } from "../../theme/theme";
-import { MOCK_STATIONS } from "../../data/stations";
+import { fetchStations } from "../../api/stations";
 import { useGeoLocation } from "../../hooks/geolocation-hook";
 import { haversineKm } from "../../utils/distance";
 import { useAppSelector } from "../../app/hooks";
@@ -31,7 +39,7 @@ import ShareDialog from "./components/ShareDialog";
  * Canvas notes:
  * - No react-router required.
  * - No Leaflet.
- * - Uses mock data and safe browser-only actions.
+ * - Uses safe browser-only actions.
  */
 
 export default function StationDetailPage() {
@@ -65,15 +73,45 @@ export default function StationDetailPage() {
   const geo = useGeoLocation();
   const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
 
-  // Simulate async load.
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const t = window.setTimeout(() => setLoading(false), 1000);
-    return () => window.clearTimeout(t);
-  }, [stationId]);
+  const [station, setStation] = useState<Station | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const station = useMemo<Station | null>(() => {
-    return MOCK_STATIONS.find((s) => s.id === stationId) ?? null;
+  useEffect(() => {
+    if (!stationId) {
+      setStation(null);
+      setLoading(false);
+      setLoadError("Station ID is missing.");
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    const loadStation = async () => {
+      setLoading(true);
+      setLoadError(null);
+      const result = await fetchStations(controller.signal);
+      if (!active) return;
+      if (!result.ok) {
+        setStation(null);
+        setLoadError(result.error || "Could not load station data.");
+        setLoading(false);
+        return;
+      }
+      const match = result.stations.find((s) => s.id === stationId) ?? null;
+      if (!match) {
+        setLoadError("Station not found.");
+      }
+      setStation(match);
+      setLoading(false);
+    };
+
+    loadStation();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [stationId]);
 
   console.log("Station detail for ID:", stationId, station);
@@ -233,6 +271,55 @@ export default function StationDetailPage() {
   };
 
   console.log("Rendering StationDetailPage for station:", station, loading);
+
+  if (!loading && !station) {
+    return (
+      <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
+        <Box
+          sx={{
+            px: { xs: 2, md: 3 },
+            py: { xs: 2, md: 3 },
+            maxWidth: 720,
+            mx: "auto",
+          }}
+        >
+          <Card
+            variant="outlined"
+            sx={{
+              borderRadius: 5,
+              borderColor: UI.border2,
+              background: UI.surface,
+              boxShadow: UI.shadow,
+            }}
+          >
+            <CardContent sx={{ p: { xs: 2.25, sm: 3 } }}>
+              <Stack spacing={1.5}>
+                <Typography sx={{ fontWeight: 900, color: UI.text, fontSize: 22 }}>
+                  Station unavailable
+                </Typography>
+                <Typography sx={{ color: UI.text2 }}>
+                  {loadError || "We couldn't load this station right now."}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate("/")}
+                  sx={{
+                    textTransform: "none",
+                    borderRadius: 3,
+                    borderColor: UI.border,
+                    color: UI.text,
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  Back to map
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
