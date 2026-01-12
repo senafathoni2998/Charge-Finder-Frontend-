@@ -55,3 +55,14 @@ export function RedirectIfAuth() {
 
   return <Outlet />;
 }
+
+export function RequireAdmin() {
+  const role = useAppSelector((state) => state.auth.role);
+  const isAdmin = role === "admin";
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+}

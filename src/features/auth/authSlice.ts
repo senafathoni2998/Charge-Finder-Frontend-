@@ -7,9 +7,12 @@ type AuthState = {
   userId: string | null;
   name: string | null;
   region: string | null;
+  role: UserRole | null;
   cars: UserCar[];
   activeCarId: string | null;
 };
+
+type UserRole = "admin" | "user";
 
 export type UserCar = {
   id: string;
@@ -19,6 +22,14 @@ export type UserCar = {
 };
 
 const VALID_CONNECTORS = new Set<ConnectorType>(["CCS2", "Type2", "CHAdeMO"]);
+
+const normalizeRole = (role: unknown): UserRole | null => {
+  if (typeof role !== "string") return null;
+  const normalized = role.trim().toLowerCase();
+  if (normalized === "admin") return "admin";
+  if (normalized === "user") return "user";
+  return null;
+};
 
 const sanitizeCar = (data: unknown): UserCar | null => {
   if (!data || typeof data !== "object") return null;
@@ -85,6 +96,7 @@ const getInitialAuth = (): AuthState => {
       userId: null,
       name: null,
       region: null,
+      role: null,
       cars: [],
       activeCarId: null,
     };
@@ -95,6 +107,7 @@ const getInitialAuth = (): AuthState => {
     const userId = window.localStorage.getItem("cf_auth_id");
     const name = window.localStorage.getItem("cf_profile_name");
     const region = window.localStorage.getItem("cf_profile_region");
+    const role = normalizeRole(window.localStorage.getItem("cf_profile_role"));
     const cars = parseCars(window.localStorage.getItem("cf_user_cars"));
     const legacyCar = parseLegacyCar(
       window.localStorage.getItem("cf_user_car")
@@ -108,6 +121,7 @@ const getInitialAuth = (): AuthState => {
       userId: userId ?? null,
       name: name && name.trim() ? name.trim() : null,
       region: region && region.trim() ? region.trim() : null,
+      role,
       cars: mergedCars,
       activeCarId,
     };
@@ -118,6 +132,7 @@ const getInitialAuth = (): AuthState => {
       name: null,
       userId: null,
       region: null,
+      role: null,
       cars: [],
       activeCarId: null,
     };
@@ -135,6 +150,7 @@ const authSlice = createSlice({
         email: string;
         name: string | null;
         region: string | null;
+        role?: string | null;
       }>
     ) {
       state.isAuthenticated = true;
@@ -142,13 +158,21 @@ const authSlice = createSlice({
       state.name = action.payload.name;
       state.email = action.payload.email;
       state.region = action.payload.region;
+      state.role = normalizeRole(action.payload.role);
     },
     updateProfile(
       state,
-      action: PayloadAction<{ name: string | null; region: string | null }>
+      action: PayloadAction<{
+        name: string | null;
+        region: string | null;
+        role?: string | null;
+      }>
     ) {
       state.name = action.payload.name;
       state.region = action.payload.region;
+      if (Object.prototype.hasOwnProperty.call(action.payload, "role")) {
+        state.role = normalizeRole(action.payload.role);
+      }
     },
     setCars(
       state,
@@ -184,6 +208,7 @@ const authSlice = createSlice({
       state.userId = null;
       state.name = null;
       state.region = null;
+      state.role = null;
       state.cars = [];
       state.activeCarId = null;
     },

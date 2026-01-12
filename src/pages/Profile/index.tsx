@@ -100,19 +100,30 @@ export default function ProfilePage() {
 
     const { user, vehicles, activeCarId: storedActiveId } = loaderData;
     if (user && typeof user === "object") {
-      const { name, region } = user;
+      const { name, region, role } = user;
+      const hasRole = Object.prototype.hasOwnProperty.call(user, "role");
       const nextName =
         typeof name === "string" && name.trim() ? name.trim() : null;
       const nextRegion =
         typeof region === "string" && region.trim() ? region.trim() : null;
-      if (nextName || nextRegion) {
+      const nextRole = hasRole
+        ? typeof role === "string" && role.trim()
+          ? role.trim()
+          : null
+        : undefined;
+      if (nextName || nextRegion || nextRole) {
         dispatch(
           updateProfile({
             name: nextName,
             region: nextRegion,
+            ...(hasRole ? { role: nextRole } : {}),
           })
         );
-        persistProfileToStorage(nextName, nextRegion);
+        if (hasRole) {
+          persistProfileToStorage(nextName, nextRegion, nextRole);
+        } else {
+          persistProfileToStorage(nextName, nextRegion);
+        }
       }
     }
 

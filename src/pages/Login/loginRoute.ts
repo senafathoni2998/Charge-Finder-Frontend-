@@ -54,6 +54,10 @@ export async function loginAction({ request }: { request: Request }) {
       typeof user.region === "string" && user.region.trim()
         ? user.region.trim()
         : null;
+    const userRole =
+      typeof user.role === "string" && user.role.trim()
+        ? user.role.trim()
+        : null;
     const userId =
       typeof user.id === "string"
         ? user.id
@@ -66,6 +70,7 @@ export async function loginAction({ request }: { request: Request }) {
       userId,
       email: userEmail,
       region: userRegion,
+      role: userRole,
       remember,
     });
 
@@ -74,6 +79,7 @@ export async function loginAction({ request }: { request: Request }) {
         email: userEmail,
         name: userName,
         region: userRegion,
+        role: userRole,
         userId: userId,
       })
     );

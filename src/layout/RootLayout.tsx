@@ -11,6 +11,7 @@ import ElectricCarIcon from "@mui/icons-material/ElectricCar";
 import PersonIcon from "@mui/icons-material/Person";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { UI } from "../theme/theme";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { setSidebarOpen } from "../features/app/appSlice";
@@ -20,11 +21,15 @@ export default function RootLayout() {
   const navigate = useNavigate();
   const showBack = location.pathname !== "/";
   const isMdUp = useAppSelector((state) => state.app.isMdMode);
+  const isAdmin = useAppSelector(
+    (state) => state.auth.isAuthenticated && state.auth.role === "admin"
+  );
   const dispatch = useAppDispatch();
   const navTitle = (() => {
     const path = location.pathname;
     if (path === "/") return "ChargeFinder";
     if (path.startsWith("/station/")) return "Station Details";
+    if (path.startsWith("/admin")) return "Admin Console";
     if (path.startsWith("/profile/cars/new")) return "Add Car";
     if (path.startsWith("/profile")) return "Profile";
     return "ChargeFinder";
@@ -81,6 +86,26 @@ export default function RootLayout() {
           </Typography>
 
           <Box sx={{ flex: 1 }} />
+
+          {isAdmin && (
+            <Tooltip title="Admin">
+              <IconButton
+                onClick={() => navigate("/admin")}
+                sx={{
+                  borderRadius: 3,
+                  color: UI.text,
+                  backgroundColor: "rgba(124,92,255,0.08)",
+                  border: `1px solid ${UI.border2}`,
+                  ":hover": {
+                    backgroundColor: "rgba(124,92,255,0.12)",
+                  },
+                }}
+                aria-label="Open admin console"
+              >
+                <AdminPanelSettingsIcon />
+              </IconButton>
+            </Tooltip>
+          )}
 
           <Tooltip title="Profile">
             <IconButton

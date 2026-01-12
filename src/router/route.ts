@@ -7,7 +7,8 @@ import Signup, { signupAction } from "../pages/Signup";
 import Profile, { profileAction, profileLoader } from "../pages/Profile";
 import AddCar, { addCarAction } from "../pages/AddCar";
 import EditCar, { editCarAction } from "../pages/EditCar";
-import { RedirectIfAuth, RequireAuth } from "./guards";
+import Admin from "../pages/Admin";
+import { RedirectIfAuth, RequireAdmin, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
   {
@@ -40,6 +41,15 @@ const router = createBrowserRouter([
             path: "profile/cars/:carId/edit",
             Component: EditCar,
             action: editCarAction,
+          },
+          {
+            Component: RequireAdmin,
+            children: [
+              {
+                path: "admin",
+                Component: Admin,
+              },
+            ],
           },
         ],
       },
