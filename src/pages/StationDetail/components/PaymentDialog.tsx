@@ -25,6 +25,8 @@ type PaymentDialogProps = {
   onConfirm: () => void;
   canSubmit: boolean;
   hasTicket: boolean;
+  submitError?: string | null;
+  isSubmitting?: boolean;
 };
 
 // Renders the payment selection dialog for buying a charging ticket.
@@ -39,7 +41,15 @@ export default function PaymentDialog({
   onConfirm,
   canSubmit,
   hasTicket,
+  submitError,
+  isSubmitting = false,
 }: PaymentDialogProps) {
+  const confirmLabel = isSubmitting
+    ? "Processing..."
+    : hasTicket
+    ? "Update payment"
+    : "Buy ticket";
+
   return (
     <Dialog
       open={open}
@@ -129,6 +139,11 @@ export default function PaymentDialog({
               );
             })}
           </RadioGroup>
+          {submitError ? (
+            <Box sx={{ color: "rgba(244,67,54,0.9)", fontSize: 13 }}>
+              {submitError}
+            </Box>
+          ) : null}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
@@ -147,7 +162,7 @@ export default function PaymentDialog({
         <Button
           variant="contained"
           onClick={onConfirm}
-          disabled={!canSubmit}
+          disabled={!canSubmit || isSubmitting}
           sx={{
             textTransform: "none",
             borderRadius: 3,
@@ -155,7 +170,7 @@ export default function PaymentDialog({
             color: "white",
           }}
         >
-          {hasTicket ? "Update payment" : "Buy ticket"}
+          {confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

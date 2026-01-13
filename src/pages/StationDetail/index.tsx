@@ -11,6 +11,10 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router";
 import { UI } from "../../theme/theme";
 import { fetchStations } from "../../api/stations";
+import {
+  fetchActiveTicketForStation,
+  requestChargingTicket,
+} from "../../api/tickets";
 import { useGeoLocation } from "../../hooks/geolocation-hook";
 import { haversineKm } from "../../utils/distance";
 import { useAppSelector } from "../../app/hooks";
@@ -32,6 +36,34 @@ import PaymentDialog from "./components/PaymentDialog";
 import ChargingDialog from "./components/ChargingDialog";
 import ReportDialog from "./components/ReportDialog";
 import ShareDialog from "./components/ShareDialog";
+
+const toCleanString = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+};
+
+const buildTicketFromServer = (
+  payload: Record<string, unknown>,
+  priceLabel: string
+): Ticket => {
+  const ticketId =
+    toCleanString(payload.id ?? payload._id) || `TICKET-${Date.now()}`;
+  const status = toCleanString(payload.status).toUpperCase();
+  const purchasedAt =
+    typeof payload.createdAt === "string"
+      ? payload.createdAt
+      : new Date().toISOString();
+  const methodLabel = "ChargeFinder account";
+
+  return {
+    id: ticketId,
+    methodId: status ? status.toLowerCase() : "ticket",
+    methodLabel,
+    priceLabel,
+    purchasedAt,
+  };
+};
 
 /**
  * ChargeFinder - Station Detail Page (Canvas-safe) - LIGHT MODE
@@ -66,6 +98,10 @@ export default function StationDetailPage() {
     PAYMENT_METHODS[0].id
   );
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [ticketRequestError, setTicketRequestError] = useState<string | null>(
+    null
+  );
+  const [ticketRequestLoading, setTicketRequestLoading] = useState(false);
   const [chargingOpen, setChargingOpen] = useState(false);
   const [chargingProgress, setChargingProgress] = useState(0);
   const [chargingStatus, setChargingStatus] = useState<ChargingStatus>("idle");
@@ -139,6 +175,22 @@ export default function StationDetailPage() {
     () => cars.find((c) => c.id === activeCarId) ?? null,
     [cars, activeCarId]
   );
+  const activeStationId = station?.id ?? null;
+
+  const preferredConnectorType = useMemo(() => {
+    if (!station) return undefined;
+    const stationConnectorTypes = station.connectors.map(
+      (connector) => connector.type
+    );
+    if (!stationConnectorTypes.length) return undefined;
+    if (activeCar?.connectorTypes?.length) {
+      const match = activeCar.connectorTypes.find((type) =>
+        stationConnectorTypes.includes(type)
+      );
+      if (match) return match;
+    }
+    return stationConnectorTypes[0];
+  }, [station, activeCar]);
 
   const isCompatible = useMemo(() => {
     if (!activeCar || !station || !activeCar.connectorTypes.length) return null;
@@ -161,6 +213,39 @@ export default function StationDetailPage() {
     ? "Change payment"
     : "Buy charging ticket";
 
+  useEffect(() => {
+    if (!activeStationId || !isAuthenticated) return;
+    const controller = new AbortController();
+    let active = true;
+
+    const loadActiveTicket = async () => {
+      const result = await fetchActiveTicketForStation(
+        activeStationId,
+        controller.signal
+      );
+      if (!active) return;
+      if (!result.ok) return;
+
+      if (!result.ticket) {
+        setTicket(null);
+        return;
+      }
+
+      const payload =
+        result.ticket && typeof result.ticket === "object"
+          ? (result.ticket as Record<string, unknown>)
+          : {};
+
+      setTicket(buildTicketFromServer(payload, ticketPriceLabel));
+    };
+
+    loadActiveTicket();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeStationId, isAuthenticated, ticketPriceLabel]);
+
   // Redirects unauthenticated users to login while preserving return path.
   const handleLoginRedirect = () => {
     const next = encodeURIComponent(
@@ -170,17 +255,44 @@ export default function StationDetailPage() {
   };
 
   // Creates a charging ticket for the selected payment method.
-  const handleBuyTicket = () => {
+  const handleBuyTicket = async () => {
     if (!station || !isAuthenticated) return;
-    const ticketId = `TICKET-${Date.now()}`;
+    setTicketRequestError(null);
+    setTicketRequestLoading(true);
+
+    const result = await requestChargingTicket({
+      stationId: station.id,
+      connectorType: preferredConnectorType,
+    });
+
+    if (!result.ok) {
+      setTicketRequestError(result.error || "Could not request ticket.");
+      setTicketRequestLoading(false);
+      return;
+    }
+
+    const payload = result.ticket ?? {};
+    const payloadRecord =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
+    const ticketId =
+      toCleanString(payloadRecord.id ?? payloadRecord._id) ||
+      `TICKET-${Date.now()}`;
+    const purchasedAt =
+      typeof payloadRecord.createdAt === "string"
+        ? payloadRecord.createdAt
+        : new Date().toISOString();
+
     setTicket({
       id: ticketId,
       methodId: selectedPayment.id,
       methodLabel: selectedPayment.label,
       priceLabel: ticketPriceLabel,
-      purchasedAt: new Date().toISOString(),
+      purchasedAt,
     });
     setPaymentOpen(false);
+    setTicketRequestLoading(false);
   };
 
   // Starts the charging progress simulation.
@@ -205,7 +317,13 @@ export default function StationDetailPage() {
       handleLoginRedirect();
       return;
     }
+    setTicketRequestError(null);
     setPaymentOpen(true);
+  };
+
+  const handleClosePayment = () => {
+    setPaymentOpen(false);
+    setTicketRequestError(null);
   };
 
   const handleCloseCharging = () => {
@@ -238,6 +356,8 @@ export default function StationDetailPage() {
     if (isAuthenticated) return;
     setPaymentOpen(false);
     setTicket(null);
+    setTicketRequestError(null);
+    setTicketRequestLoading(false);
     setChargingOpen(false);
     setChargingProgress(0);
     setChargingStatus("idle");
@@ -374,7 +494,7 @@ export default function StationDetailPage() {
 
       <PaymentDialog
         open={paymentOpen && isAuthenticated}
-        onClose={() => setPaymentOpen(false)}
+        onClose={handleClosePayment}
         ticketKwh={TICKET_KWH}
         ticketPriceLabel={ticketPriceLabel}
         selectedPaymentId={selectedPaymentId}
@@ -383,6 +503,8 @@ export default function StationDetailPage() {
         onConfirm={handleBuyTicket}
         canSubmit={!!station && isAuthenticated}
         hasTicket={!!ticket}
+        submitError={ticketRequestError}
+        isSubmitting={ticketRequestLoading}
       />
 
       <ChargingDialog
