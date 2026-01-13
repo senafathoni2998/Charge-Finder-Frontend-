@@ -98,10 +98,10 @@ export default function RootLayout() {
                 sx={{
                   borderRadius: 3,
                   color: UI.text,
-                  backgroundColor: "rgba(124,92,255,0.08)",
-                  border: `1px solid ${UI.border2}`,
+                  // backgroundColor: "rgba(124,92,255,0.08)",
                   ":hover": {
-                    backgroundColor: "rgba(124,92,255,0.12)",
+                    border: `1px solid ${UI.border2}`,
+                    backgroundColor: "rgba(10,10,16,0.03)",
                   },
                 }}
                 aria-label="Open admin console"
