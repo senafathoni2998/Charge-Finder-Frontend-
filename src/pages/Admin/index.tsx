@@ -12,6 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { useNavigate } from "react-router";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import AddIcon from "@mui/icons-material/Add";
 import EvStationIcon from "@mui/icons-material/EvStation";
@@ -284,6 +285,7 @@ const queuePriorityStyles = (priority: AdminQueueItem["priority"]) => {
 };
 
 export default function AdminPage() {
+  const navigate = useNavigate();
   const [stations, setStations] = useState<Station[]>([]);
   const [stationsLoading, setStationsLoading] = useState(true);
   const [stationsError, setStationsError] = useState<string | null>(null);
@@ -452,6 +454,7 @@ export default function AdminPage() {
               <Button
                 variant="outlined"
                 startIcon={<AddIcon />}
+                onClick={() => navigate("/admin/stations/new")}
                 sx={{
                   textTransform: "none",
                   borderRadius: 3,
@@ -647,6 +650,7 @@ export default function AdminPage() {
                       <Button
                         variant="contained"
                         startIcon={<AddIcon />}
+                        onClick={() => navigate("/admin/stations/new")}
                         sx={{
                           textTransform: "none",
                           borderRadius: 3,
@@ -757,13 +761,18 @@ export default function AdminPage() {
                                     ...statusChipStyles(station.status),
                                   }}
                                 />
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  sx={{
-                                    textTransform: "none",
-                                    borderRadius: 3,
-                                    borderColor: UI.border2,
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() =>
+                                  navigate(
+                                    `/admin/stations/${station.id}/edit`
+                                  )
+                                }
+                                sx={{
+                                  textTransform: "none",
+                                  borderRadius: 3,
+                                  borderColor: UI.border2,
                                     color: UI.text,
                                   }}
                                 >

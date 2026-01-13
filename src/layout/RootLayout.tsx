@@ -29,6 +29,10 @@ export default function RootLayout() {
     const path = location.pathname;
     if (path === "/") return "ChargeFinder";
     if (path.startsWith("/station/")) return "Station Details";
+    if (path.startsWith("/admin/stations/new")) return "Add Station";
+    if (path.startsWith("/admin/stations/") && path.endsWith("/edit")) {
+      return "Edit Station";
+    }
     if (path.startsWith("/admin")) return "Admin Console";
     if (path.startsWith("/profile/cars/new")) return "Add Car";
     if (path.startsWith("/profile")) return "Profile";
