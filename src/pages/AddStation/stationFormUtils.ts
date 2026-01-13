@@ -112,7 +112,9 @@ export const parseStationFormData = (
   const address = String(formData.get("address") || "").trim();
   if (!address) return { ok: false, error: "Address is required." };
 
-  const statusRaw = String(formData.get("status") || "").trim().toUpperCase();
+  const statusRaw = String(formData.get("status") || "")
+    .trim()
+    .toUpperCase();
   const status = VALID_STATUSES.has(statusRaw as Availability)
     ? (statusRaw as Availability)
     : "AVAILABLE";
@@ -154,7 +156,7 @@ export const parseStationFormData = (
   const photosRaw = parseJson(formData.get("photos"), []);
   const photos = parsePhotos(photosRaw);
 
-  const notes = String(formData.get("notes") || "").trim();
+  const notes = String(formData.get("notes") || "").trim() || "";
 
   return {
     ok: true,

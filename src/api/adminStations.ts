@@ -8,6 +8,11 @@ type StationMutationResult = {
   error?: string;
 };
 
+type StationDeleteResult = {
+  ok: boolean;
+  error?: string;
+};
+
 // Creates a new station using admin credentials.
 export const createStation = async (
   payload: StationPayload,
@@ -96,6 +101,44 @@ export const updateStation = async (
       ok: false,
       station: null,
       error: err instanceof Error ? err.message : "Could not update station.",
+    };
+  }
+};
+
+// Deletes a station using admin credentials.
+export const deleteStation = async (
+  stationId: string,
+  signal?: AbortSignal
+): Promise<StationDeleteResult> => {
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  if (!baseUrl) {
+    return { ok: false, error: "Backend URL is not configured." };
+  }
+
+  if (!stationId) {
+    return { ok: false, error: "Station ID is missing." };
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/stations/delete-station`, {
+      method: "DELETE",
+      credentials: "include",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stationId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: data.message || "Could not delete station.",
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not delete station.",
     };
   }
 };

@@ -33,6 +33,7 @@ export default function RootLayout() {
     if (path.startsWith("/admin/stations/") && path.endsWith("/edit")) {
       return "Edit Station";
     }
+    if (path.startsWith("/admin/users/new")) return "Add User";
     if (path.startsWith("/admin")) return "Admin Console";
     if (path.startsWith("/profile/cars/new")) return "Add Car";
     if (path.startsWith("/profile")) return "Profile";
