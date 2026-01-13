@@ -10,6 +10,7 @@ import EditCar, { editCarAction } from "../pages/EditCar";
 import Admin from "../pages/Admin";
 import AddStation, { addStationAction } from "../pages/AddStation";
 import EditStation, { editStationAction } from "../pages/EditStation";
+import AddUser, { addUserAction } from "../pages/AddUser";
 import { RedirectIfAuth, RequireAdmin, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
@@ -60,6 +61,11 @@ const router = createBrowserRouter([
                 path: "admin/stations/:stationId/edit",
                 Component: EditStation,
                 action: editStationAction,
+              },
+              {
+                path: "admin/users/new",
+                Component: AddUser,
+                action: addUserAction,
               },
             ],
           },

@@ -1,20 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  Collapse,
   Divider,
   IconButton,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   InputAdornment,
+  Slider,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EvStationIcon from "@mui/icons-material/EvStation";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PeopleIcon from "@mui/icons-material/People";
@@ -22,11 +31,13 @@ import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
-import type { Station } from "../../models/model";
+import type { Availability, ConnectorType, Station } from "../../models/model";
 import { fetchStations } from "../../api/stations";
-import { fetchUsers, patchUser } from "../../api/users";
+import { fetchUsers, patchUser, deleteUser } from "../../api/users";
+import { deleteStation } from "../../api/adminStations";
 import { UI } from "../../theme/theme";
 import { minutesAgo } from "../../utils/time";
+import { CONNECTOR_OPTIONS } from "../MainPage/constants";
 
 type AdminUser = {
   id: string;
@@ -37,33 +48,7 @@ type AdminUser = {
   lastActive: string;
 };
 
-type AdminQueueItem = {
-  id: string;
-  title: string;
-  detail: string;
-  priority: "high" | "medium" | "low";
-};
-
-const adminQueue: AdminQueueItem[] = [
-  {
-    id: "queue-01",
-    title: "Station st-003 offline report",
-    detail: "Verify outage and notify operator",
-    priority: "high",
-  },
-  {
-    id: "queue-02",
-    title: "New station submission",
-    detail: "Kelapa Gading Supercharge expansion",
-    priority: "medium",
-  },
-  {
-    id: "queue-03",
-    title: "User role change request",
-    detail: "Promote rafi@chargefinder.app to admin",
-    priority: "low",
-  },
-];
+type StationFilterStatus = "" | Availability;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object";
@@ -108,7 +93,9 @@ const formatLastActive = (value: unknown): string => {
   return "N/A";
 };
 
-const normalizeUserStatus = (raw: Record<string, unknown>): AdminUser["status"] => {
+const normalizeUserStatus = (
+  raw: Record<string, unknown>
+): AdminUser["status"] => {
   const statusValue = raw.status ?? raw.state;
   if (typeof statusValue === "string") {
     const normalized = statusValue.trim().toLowerCase();
@@ -144,7 +131,8 @@ const normalizeAdminUser = (data: unknown): AdminUser | null => {
   const name = toCleanString(
     data.name ?? data.fullName ?? data.displayName ?? data.username
   );
-  const role = normalizeRoleValue(data.role ?? data.roles ?? data.userRole) || "user";
+  const role =
+    normalizeRoleValue(data.role ?? data.roles ?? data.userRole) || "user";
   const status = normalizeUserStatus(data);
   const lastActive = formatLastActive(
     data.lastActive ??
@@ -261,41 +249,44 @@ const userStatusChipStyles = (status: AdminUser["status"]) => {
   }
 };
 
-const queuePriorityStyles = (priority: AdminQueueItem["priority"]) => {
-  switch (priority) {
-    case "high":
-      return {
-        backgroundColor: "rgba(244, 67, 54, 0.12)",
-        border: "1px solid rgba(244, 67, 54, 0.35)",
-        color: UI.text,
-      };
-    case "medium":
-      return {
-        backgroundColor: "rgba(255, 193, 7, 0.18)",
-        border: "1px solid rgba(255, 193, 7, 0.4)",
-        color: UI.text,
-      };
-    default:
-      return {
-        backgroundColor: "rgba(10, 10, 16, 0.05)",
-        border: `1px solid ${UI.border2}`,
-        color: UI.text,
-      };
-  }
-};
-
 export default function AdminPage() {
   const navigate = useNavigate();
   const [stations, setStations] = useState<Station[]>([]);
   const [stationsLoading, setStationsLoading] = useState(true);
   const [stationsError, setStationsError] = useState<string | null>(null);
+  const [stationActionError, setStationActionError] = useState<string | null>(
+    null
+  );
+  const [stationsDeleting, setStationsDeleting] = useState<
+    Record<string, boolean>
+  >({});
+  const [stationMenuAnchorEl, setStationMenuAnchorEl] =
+    useState<HTMLElement | null>(null);
+  const [stationMenuTarget, setStationMenuTarget] = useState<Station | null>(
+    null
+  );
+  const [stationQuery, setStationQuery] = useState("");
+  const [stationStatusFilter, setStationStatusFilter] =
+    useState<StationFilterStatus>("");
+  const [stationConnectorSet, setStationConnectorSet] = useState<
+    Set<ConnectorType>
+  >(new Set());
+  const [stationMinKW, setStationMinKW] = useState(0);
+  const [stationFiltersOpen, setStationFiltersOpen] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
-  const [usersUpdating, setUsersUpdating] = useState<
-    Record<string, boolean>
-  >({});
+  const [usersUpdating, setUsersUpdating] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [usersDeleting, setUsersDeleting] = useState<Record<string, boolean>>(
+    {}
+  );
   const [userActionError, setUserActionError] = useState<string | null>(null);
+  const [userMenuAnchorEl, setUserMenuAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const [userMenuTarget, setUserMenuTarget] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -349,6 +340,73 @@ export default function AdminPage() {
     setUsersUpdating((prev) => ({ ...prev, [user.id]: false }));
   };
 
+  const handleDeleteUser = async (user: AdminUser) => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        `Delete user ${user.name || user.email}? This cannot be undone.`
+      );
+      if (!confirmed) return;
+    }
+    setUserActionError(null);
+    setUsersDeleting((prev) => ({ ...prev, [user.id]: true }));
+
+    const result = await deleteUser(user.id);
+    if (!result.ok) {
+      setUserActionError(result.error || "Could not delete user.");
+      setUsersDeleting((prev) => ({ ...prev, [user.id]: false }));
+      return;
+    }
+
+    setUsers((prev) => prev.filter((existing) => existing.id !== user.id));
+    setUsersDeleting((prev) => ({ ...prev, [user.id]: false }));
+  };
+
+  const handleDeleteStation = async (station: Station) => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        `Delete station ${station.name}? This cannot be undone.`
+      );
+      if (!confirmed) return;
+    }
+    setStationActionError(null);
+    setStationsDeleting((prev) => ({ ...prev, [station.id]: true }));
+
+    const result = await deleteStation(station.id);
+    if (!result.ok) {
+      setStationActionError(result.error || "Could not delete station.");
+      setStationsDeleting((prev) => ({ ...prev, [station.id]: false }));
+      return;
+    }
+
+    setStations((prev) =>
+      prev.filter((existing) => existing.id !== station.id)
+    );
+    setStationsDeleting((prev) => ({ ...prev, [station.id]: false }));
+  };
+
+  const openStationMenu = (
+    event: MouseEvent<HTMLElement>,
+    station: Station
+  ) => {
+    setStationMenuAnchorEl(event.currentTarget);
+    setStationMenuTarget(station);
+  };
+
+  const closeStationMenu = () => {
+    setStationMenuAnchorEl(null);
+    setStationMenuTarget(null);
+  };
+
+  const openUserMenu = (event: MouseEvent<HTMLElement>, user: AdminUser) => {
+    setUserMenuAnchorEl(event.currentTarget);
+    setUserMenuTarget(user);
+  };
+
+  const closeUserMenu = () => {
+    setUserMenuAnchorEl(null);
+    setUserMenuTarget(null);
+  };
+
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
@@ -377,12 +435,68 @@ export default function AdminPage() {
     };
   }, []);
 
+  const stationFiltersActiveCount = useMemo(() => {
+    let count = 0;
+    if (stationStatusFilter) count += 1;
+    if (stationConnectorSet.size) count += 1;
+    if (stationMinKW > 0) count += 1;
+    return count;
+  }, [stationStatusFilter, stationConnectorSet, stationMinKW]);
+
+  const filteredStations = useMemo(() => {
+    const query = stationQuery.trim().toLowerCase();
+    return stations.filter((station) => {
+      const matchesQuery = !query
+        ? true
+        : station.name.toLowerCase().includes(query) ||
+          station.address.toLowerCase().includes(query) ||
+          station.id.toLowerCase().includes(query);
+
+      const matchesStatus = !stationStatusFilter
+        ? true
+        : station.status === stationStatusFilter;
+
+      const matchesConnector = stationConnectorSet.size
+        ? station.connectors.some((c) => stationConnectorSet.has(c.type))
+        : true;
+
+      const matchesMinKw = stationMinKW
+        ? station.connectors.some((c) => c.powerKW >= stationMinKW)
+        : true;
+
+      return matchesQuery && matchesStatus && matchesConnector && matchesMinKw;
+    });
+  }, [
+    stations,
+    stationQuery,
+    stationStatusFilter,
+    stationConnectorSet,
+    stationMinKW,
+  ]);
+
+  const handleToggleStationConnector = (connector: ConnectorType) => {
+    setStationConnectorSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(connector)) next.delete(connector);
+      else next.add(connector);
+      return next;
+    });
+  };
+
+  const handleResetStationFilters = () => {
+    setStationStatusFilter("");
+    setStationConnectorSet(new Set());
+    setStationMinKW(0);
+  };
+
   const stats = useMemo(() => {
     const totalStations = stations.length;
-    const availableStations = stations.filter((s) => s.status === "AVAILABLE")
-      .length;
-    const offlineStations = stations.filter((s) => s.status === "OFFLINE")
-      .length;
+    const availableStations = stations.filter(
+      (s) => s.status === "AVAILABLE"
+    ).length;
+    const offlineStations = stations.filter(
+      (s) => s.status === "OFFLINE"
+    ).length;
     const totalUsers = users.length;
     const activeUsers = users.filter((u) => u.status === "active").length;
     const adminCount = users.filter((u) => u.role === "admin").length;
@@ -431,7 +545,9 @@ export default function AdminPage() {
             alignItems={{ md: "center" }}
           >
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 950, color: UI.text, fontSize: 30 }}>
+              <Typography
+                sx={{ fontWeight: 950, color: UI.text, fontSize: 30 }}
+              >
                 Admin Control Center
               </Typography>
               <Typography sx={{ color: UI.text2 }}>
@@ -468,6 +584,7 @@ export default function AdminPage() {
               <Button
                 variant="contained"
                 startIcon={<PeopleIcon />}
+                onClick={() => navigate("/admin/users/new")}
                 sx={{
                   textTransform: "none",
                   borderRadius: 3,
@@ -638,14 +755,20 @@ export default function AdminPage() {
                       <Button
                         variant="outlined"
                         startIcon={<TuneIcon />}
+                        onClick={() => setStationFiltersOpen((prev) => !prev)}
                         sx={{
                           textTransform: "none",
                           borderRadius: 3,
                           borderColor: UI.border,
                           color: UI.text,
+                          backgroundColor: stationFiltersOpen
+                            ? "rgba(124,92,255,0.08)"
+                            : "transparent",
                         }}
                       >
-                        Filters
+                        {stationFiltersActiveCount
+                          ? `Filters (${stationFiltersActiveCount})`
+                          : "Filters"}
                       </Button>
                       <Button
                         variant="contained"
@@ -666,6 +789,8 @@ export default function AdminPage() {
                     placeholder="Search stations, IDs, or cities"
                     size="small"
                     fullWidth
+                    value={stationQuery}
+                    onChange={(event) => setStationQuery(event.target.value)}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -675,13 +800,178 @@ export default function AdminPage() {
                     }}
                   />
 
+                  <Collapse in={stationFiltersOpen}>
+                    <Box
+                      sx={{
+                        p: 2,
+                        borderRadius: 3,
+                        border: `1px solid ${UI.border2}`,
+                        backgroundColor: "rgba(10,10,16,0.02)",
+                      }}
+                    >
+                      <Stack spacing={2}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          justifyContent="space-between"
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{ color: UI.text3 }}
+                          >
+                            Filters
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={handleResetStationFilters}
+                            disabled={!stationFiltersActiveCount}
+                            sx={{
+                              textTransform: "none",
+                              borderRadius: 3,
+                              color: UI.text2,
+                            }}
+                          >
+                            Reset filters
+                          </Button>
+                        </Stack>
+
+                        <Box
+                          sx={{
+                            display: "inline-flex",
+                            justifyContent: "space-between",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{ color: UI.text3 }}
+                          >
+                            Availability
+                          </Typography>
+                          <ToggleButtonGroup
+                            exclusive
+                            value={stationStatusFilter}
+                            onChange={(_, value) =>
+                              setStationStatusFilter(
+                                (value ?? "") as StationFilterStatus
+                              )
+                            }
+                            size="small"
+                            sx={{
+                              mt: 1,
+                              flexWrap: "wrap",
+                              "& .MuiToggleButton-root": {
+                                textTransform: "none",
+                                borderColor: UI.border2,
+                              },
+                            }}
+                          >
+                            <ToggleButton value="">All</ToggleButton>
+                            <ToggleButton value="AVAILABLE">
+                              Available
+                            </ToggleButton>
+                            <ToggleButton value="BUSY">Busy</ToggleButton>
+                            <ToggleButton value="OFFLINE">Offline</ToggleButton>
+                          </ToggleButtonGroup>
+                        </Box>
+
+                        <Box>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: UI.text3 }}
+                          >
+                            Connectors
+                          </Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ mt: 1, flexWrap: "wrap" }}
+                          >
+                            {CONNECTOR_OPTIONS.map((connector) => {
+                              const active = stationConnectorSet.has(connector);
+                              const chipBg = active
+                                ? "rgba(124,92,255,0.12)"
+                                : "transparent";
+                              const chipBorder = active
+                                ? "rgba(124,92,255,0.35)"
+                                : UI.border2;
+                              return (
+                                <Chip
+                                  key={connector}
+                                  clickable
+                                  label={connector}
+                                  variant={active ? "filled" : "outlined"}
+                                  onClick={() =>
+                                    handleToggleStationConnector(connector)
+                                  }
+                                  sx={{
+                                    borderRadius: 999,
+                                    backgroundColor: chipBg,
+                                    borderColor: chipBorder,
+                                    color: UI.text,
+                                    fontWeight: 700,
+                                  }}
+                                />
+                              );
+                            })}
+                          </Stack>
+                        </Box>
+
+                        <Box>
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="center"
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{ color: UI.text3 }}
+                            >
+                              Minimum power
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              sx={{ color: UI.text3 }}
+                            >
+                              {stationMinKW || 0} kW
+                            </Typography>
+                          </Stack>
+                          <Slider
+                            value={
+                              Number.isFinite(stationMinKW) ? stationMinKW : 0
+                            }
+                            onChange={(_, value) =>
+                              setStationMinKW(
+                                Array.isArray(value) ? value[0] : value
+                              )
+                            }
+                            step={10}
+                            min={0}
+                            max={200}
+                            sx={{ mt: 1 }}
+                          />
+                        </Box>
+                      </Stack>
+                    </Box>
+                  </Collapse>
+
+                  {stationActionError ? (
+                    <Typography
+                      sx={{ color: "rgba(244,67,54,0.9)", fontSize: 13 }}
+                    >
+                      {stationActionError}
+                    </Typography>
+                  ) : null}
+
                   <Stack spacing={2}>
                     {stationsLoading ? (
                       <Typography sx={{ color: UI.text2, fontSize: 14 }}>
                         Loading stations\u2026
                       </Typography>
-                    ) : stations.length ? (
-                      stations.map((station) => {
+                    ) : filteredStations.length ? (
+                      filteredStations.map((station) => {
                         const totalPorts = station.connectors.reduce(
                           (sum, c) => sum + c.ports,
                           0
@@ -740,8 +1030,8 @@ export default function AdminPage() {
                                   <Typography
                                     sx={{ color: UI.text3, fontSize: 12 }}
                                   >
-                                    Updated {minutesAgo(station.lastUpdatedISO)}m
-                                    ago
+                                    Updated {minutesAgo(station.lastUpdatedISO)}
+                                    m ago
                                   </Typography>
                                 </Stack>
                               </Box>
@@ -761,24 +1051,10 @@ export default function AdminPage() {
                                     ...statusChipStyles(station.status),
                                   }}
                                 />
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() =>
-                                  navigate(
-                                    `/admin/stations/${station.id}/edit`
-                                  )
-                                }
-                                sx={{
-                                  textTransform: "none",
-                                  borderRadius: 3,
-                                  borderColor: UI.border2,
-                                    color: UI.text,
-                                  }}
-                                >
-                                  Edit
-                                </Button>
                                 <IconButton
+                                  onClick={(event) =>
+                                    openStationMenu(event, station)
+                                  }
                                   sx={{
                                     borderRadius: 2.5,
                                     border: `1px solid ${UI.border2}`,
@@ -795,13 +1071,57 @@ export default function AdminPage() {
                       })
                     ) : (
                       <Typography sx={{ color: UI.text2, fontSize: 14 }}>
-                        {stationsError || "No stations found."}
+                        {stationsError ||
+                          (stations.length
+                            ? "No stations match the current filters."
+                            : "No stations found.")}
                       </Typography>
                     )}
                   </Stack>
                 </Stack>
               </CardContent>
             </Card>
+            <Menu
+              anchorEl={stationMenuAnchorEl}
+              open={Boolean(stationMenuAnchorEl)}
+              onClose={closeStationMenu}
+              PaperProps={{ sx: { borderRadius: 2.5, minWidth: 160 } }}
+            >
+              <MenuItem
+                onClick={() => {
+                  if (stationMenuTarget) {
+                    navigate(`/admin/stations/${stationMenuTarget.id}/edit`);
+                  }
+                  closeStationMenu();
+                }}
+                disabled={!stationMenuTarget}
+              >
+                <ListItemIcon>
+                  <EditOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                Edit
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  if (stationMenuTarget) {
+                    handleDeleteStation(stationMenuTarget);
+                  }
+                  closeStationMenu();
+                }}
+                disabled={
+                  !stationMenuTarget || !!stationsDeleting[stationMenuTarget.id]
+                }
+                sx={{ color: "rgba(244,67,54,0.95)" }}
+              >
+                <ListItemIcon>
+                  <DeleteOutlineIcon
+                    fontSize="small"
+                    sx={{ color: "rgba(244,67,54,0.95)" }}
+                  />
+                </ListItemIcon>
+                Delete
+              </MenuItem>
+            </Menu>
 
             <Stack spacing={2}>
               <Card
@@ -832,6 +1152,7 @@ export default function AdminPage() {
                       <Button
                         variant="outlined"
                         startIcon={<AddIcon />}
+                        onClick={() => navigate("/admin/users/new")}
                         sx={{
                           textTransform: "none",
                           borderRadius: 3,
@@ -857,7 +1178,9 @@ export default function AdminPage() {
                     />
 
                     {userActionError ? (
-                      <Typography sx={{ color: "rgba(244,67,54,0.9)", fontSize: 13 }}>
+                      <Typography
+                        sx={{ color: "rgba(244,67,54,0.9)", fontSize: 13 }}
+                      >
                         {userActionError}
                       </Typography>
                     ) : null}
@@ -885,10 +1208,14 @@ export default function AdminPage() {
                                 >
                                   {user.name}
                                 </Typography>
-                                <Typography sx={{ color: UI.text2, fontSize: 13 }}>
+                                <Typography
+                                  sx={{ color: UI.text2, fontSize: 13 }}
+                                >
                                   {user.email}
                                 </Typography>
-                                <Typography sx={{ color: UI.text3, fontSize: 12 }}>
+                                <Typography
+                                  sx={{ color: UI.text3, fontSize: 12 }}
+                                >
                                   Last active: {user.lastActive}
                                 </Typography>
                               </Box>
@@ -919,21 +1246,24 @@ export default function AdminPage() {
                                     ...userStatusChipStyles(user.status),
                                   }}
                                 />
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  onClick={() => handleUserStatusAction(user)}
-                                  disabled={!!usersUpdating[user.id]}
-                                  sx={{
-                                    textTransform: "none",
-                                    borderRadius: 3,
-                                    borderColor: UI.border2,
-                                    color: UI.text,
-                                  }}
-                                >
-                                  {userActionLabel(user.status)}
-                                </Button>
+                                {user.status !== "active" ? (
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={() => handleUserStatusAction(user)}
+                                    disabled={!!usersUpdating[user.id]}
+                                    sx={{
+                                      textTransform: "none",
+                                      borderRadius: 3,
+                                      borderColor: UI.border2,
+                                      color: UI.text,
+                                    }}
+                                  >
+                                    {userActionLabel(user.status)}
+                                  </Button>
+                                ) : null}
                                 <IconButton
+                                  onClick={(event) => openUserMenu(event, user)}
                                   sx={{
                                     borderRadius: 2.5,
                                     border: `1px solid ${UI.border2}`,
@@ -956,96 +1286,33 @@ export default function AdminPage() {
                   </Stack>
                 </CardContent>
               </Card>
-
-              <Card
-                variant="outlined"
-                sx={{
-                  borderRadius: 5,
-                  borderColor: UI.border2,
-                  background: UI.surface,
-                  boxShadow: UI.shadow,
-                }}
+              <Menu
+                anchorEl={userMenuAnchorEl}
+                open={Boolean(userMenuAnchorEl)}
+                onClose={closeUserMenu}
+                PaperProps={{ sx: { borderRadius: 2.5, minWidth: 160 } }}
               >
-                <CardContent sx={{ p: { xs: 2.25, sm: 3 } }}>
-                  <Stack spacing={2}>
-                    <Box>
-                      <Typography sx={{ fontWeight: 900, color: UI.text }}>
-                        Review queue
-                      </Typography>
-                      <Typography sx={{ color: UI.text2, fontSize: 14 }}>
-                        Pending operational actions for today.
-                      </Typography>
-                    </Box>
-
-                    <Stack spacing={1.5}>
-                      {adminQueue.map((item) => (
-                        <Box
-                          key={item.id}
-                          sx={{
-                            borderRadius: 3,
-                            border: `1px solid ${UI.border2}`,
-                            backgroundColor: "rgba(10,10,16,0.02)",
-                            p: 1.5,
-                          }}
-                        >
-                          <Stack spacing={0.75}>
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              alignItems="center"
-                            >
-                              <Typography
-                                sx={{ fontWeight: 700, color: UI.text }}
-                              >
-                                {item.title}
-                              </Typography>
-                              <Box sx={{ flex: 1 }} />
-                              <Chip
-                                label={item.priority}
-                                size="small"
-                                sx={{
-                                  borderRadius: 999,
-                                  fontWeight: 700,
-                                  textTransform: "capitalize",
-                                  ...queuePriorityStyles(item.priority),
-                                }}
-                              />
-                            </Stack>
-                            <Typography sx={{ color: UI.text2, fontSize: 13 }}>
-                              {item.detail}
-                            </Typography>
-                            <Stack direction="row" spacing={1}>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                sx={{
-                                  textTransform: "none",
-                                  borderRadius: 3,
-                                  borderColor: UI.border2,
-                                  color: UI.text,
-                                }}
-                              >
-                                Review
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                sx={{
-                                  textTransform: "none",
-                                  borderRadius: 3,
-                                  background: UI.brandGrad,
-                                }}
-                              >
-                                Resolve
-                              </Button>
-                            </Stack>
-                          </Stack>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Stack>
-                </CardContent>
-              </Card>
+                <MenuItem
+                  onClick={() => {
+                    if (userMenuTarget) {
+                      handleDeleteUser(userMenuTarget);
+                    }
+                    closeUserMenu();
+                  }}
+                  disabled={
+                    !userMenuTarget || !!usersDeleting[userMenuTarget.id]
+                  }
+                  sx={{ color: "rgba(244,67,54,0.95)" }}
+                >
+                  <ListItemIcon>
+                    <DeleteOutlineIcon
+                      fontSize="small"
+                      sx={{ color: "rgba(244,67,54,0.95)" }}
+                    />
+                  </ListItemIcon>
+                  Delete
+                </MenuItem>
+              </Menu>
             </Stack>
           </Box>
         </Stack>
