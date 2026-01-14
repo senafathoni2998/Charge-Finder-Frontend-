@@ -29,6 +29,8 @@ type ActionsCardProps = {
   chargingActionLabel: string;
   onChargingAction: () => void;
   onOpenMaps: () => void;
+  chargingError?: string | null;
+  chargingLoading?: boolean;
 };
 
 // Shows the primary action buttons and live station status.
@@ -43,6 +45,8 @@ export default function ActionsCard({
   chargingActionLabel,
   onChargingAction,
   onOpenMaps,
+  chargingError,
+  chargingLoading = false,
 }: ActionsCardProps) {
   return (
     <Card
@@ -60,7 +64,7 @@ export default function ActionsCard({
           <Typography sx={{ fontWeight: 950, color: UI.text }}>Actions</Typography>
           <Button
             variant="contained"
-            disabled={!canCharge}
+            disabled={!canCharge || chargingLoading}
             startIcon={<ElectricBoltIcon />}
             sx={{
               textTransform: "none",
@@ -73,6 +77,11 @@ export default function ActionsCard({
           >
             {chargingActionLabel}
           </Button>
+          {chargingError ? (
+            <Typography variant="caption" sx={{ color: "rgba(244,67,54,0.9)" }}>
+              {chargingError}
+            </Typography>
+          ) : null}
           {!isAuthenticated ? (
             <Typography variant="caption" sx={{ color: UI.text3 }}>
               Log in to buy a ticket and start charging.

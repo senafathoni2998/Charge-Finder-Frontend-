@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -11,6 +11,10 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router";
 import { UI } from "../../theme/theme";
 import { fetchStations } from "../../api/stations";
+import {
+  completeChargingSession,
+  startChargingSession,
+} from "../../api/charging";
 import {
   fetchActiveTicketForStation,
   requestChargingTicket,
@@ -43,6 +47,41 @@ const toCleanString = (value: unknown): string => {
   return "";
 };
 
+const toChargingStatus = (value: unknown): ChargingStatus | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "charging") return "charging";
+  if (normalized === "done" || normalized === "completed") return "done";
+  if (normalized === "idle") return "idle";
+  return null;
+};
+
+const toProgressPercent = (value: unknown): number | null => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.min(100, Math.max(0, Math.round(num)));
+};
+
+// Builds the WebSocket URL for charging progress updates.
+const buildChargingSocketUrl = (stationId: string): string | null => {
+  const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
+  const query = `stationId=${encodeURIComponent(stationId)}`;
+
+  if (baseUrl) {
+    try {
+      const url = new URL(baseUrl);
+      const protocol = url.protocol === "https:" ? "wss" : "ws";
+      return `${protocol}://${url.host}/ws/charging-progress?${query}`;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof window === "undefined") return null;
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${window.location.host}/ws/charging-progress?${query}`;
+};
+
 const buildTicketFromServer = (
   payload: Record<string, unknown>,
   priceLabel: string
@@ -55,6 +94,32 @@ const buildTicketFromServer = (
       ? payload.createdAt
       : new Date().toISOString();
   const methodLabel = "ChargeFinder account";
+  const chargingStatus =
+    toChargingStatus(payload.chargingStatus) ??
+    toChargingStatus(payload.charging_state) ??
+    null;
+  const progressPercent =
+    toProgressPercent(payload.progressPercent) ??
+    toProgressPercent(payload.progress_percent) ??
+    null;
+  const chargingStartedAt =
+    typeof payload.chargingStartedAt === "string"
+      ? payload.chargingStartedAt
+      : typeof payload.charging_started_at === "string"
+      ? payload.charging_started_at
+      : undefined;
+  const chargingUpdatedAt =
+    typeof payload.chargingUpdatedAt === "string"
+      ? payload.chargingUpdatedAt
+      : typeof payload.charging_updated_at === "string"
+      ? payload.charging_updated_at
+      : undefined;
+  const chargingCompletedAt =
+    typeof payload.chargingCompletedAt === "string"
+      ? payload.chargingCompletedAt
+      : typeof payload.charging_completed_at === "string"
+      ? payload.charging_completed_at
+      : undefined;
 
   return {
     id: ticketId,
@@ -62,6 +127,11 @@ const buildTicketFromServer = (
     methodLabel,
     priceLabel,
     purchasedAt,
+    chargingStatus: chargingStatus ?? undefined,
+    progressPercent: progressPercent ?? undefined,
+    chargingStartedAt,
+    chargingUpdatedAt,
+    chargingCompletedAt,
   };
 };
 
@@ -105,6 +175,11 @@ export default function StationDetailPage() {
   const [chargingOpen, setChargingOpen] = useState(false);
   const [chargingProgress, setChargingProgress] = useState(0);
   const [chargingStatus, setChargingStatus] = useState<ChargingStatus>("idle");
+  const [chargingRequestLoading, setChargingRequestLoading] = useState(false);
+  const [chargingRequestError, setChargingRequestError] = useState<
+    string | null
+  >(null);
+  const chargingCompleteRequested = useRef(false);
 
   const geo = useGeoLocation();
   const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
@@ -236,7 +311,14 @@ export default function StationDetailPage() {
           ? (result.ticket as Record<string, unknown>)
           : {};
 
-      setTicket(buildTicketFromServer(payload, ticketPriceLabel));
+      const normalizedTicket = buildTicketFromServer(payload, ticketPriceLabel);
+      setTicket(normalizedTicket);
+      if (normalizedTicket.progressPercent != null) {
+        setChargingProgress(normalizedTicket.progressPercent);
+      }
+      if (normalizedTicket.chargingStatus) {
+        setChargingStatus(normalizedTicket.chargingStatus);
+      }
     };
 
     loadActiveTicket();
@@ -295,12 +377,43 @@ export default function StationDetailPage() {
     setTicketRequestLoading(false);
   };
 
-  // Starts the charging progress simulation.
-  const handleStartCharging = () => {
-    if (!canStartCharging) return;
-    setChargingProgress(0);
-    setChargingStatus("charging");
+  // Starts charging by calling the backend endpoint.
+  const handleStartCharging = async () => {
+    if (!canStartCharging || !station || chargingRequestLoading) return;
+    setChargingRequestLoading(true);
+    setChargingRequestError(null);
+
+    const result = await startChargingSession({ stationId: station.id });
+    if (!result.ok) {
+      setChargingRequestError(result.error || "Could not start charging.");
+      setChargingRequestLoading(false);
+      return;
+    }
+
+    if (result.ticket && typeof result.ticket === "object") {
+      const normalizedTicket = buildTicketFromServer(
+        result.ticket as Record<string, unknown>,
+        ticketPriceLabel
+      );
+      setTicket(normalizedTicket);
+      if (normalizedTicket.progressPercent != null) {
+        setChargingProgress(normalizedTicket.progressPercent);
+      } else {
+        setChargingProgress(0);
+      }
+      if (normalizedTicket.chargingStatus) {
+        setChargingStatus(normalizedTicket.chargingStatus);
+      } else {
+        setChargingStatus("charging");
+      }
+    } else {
+      setChargingProgress(0);
+      setChargingStatus("charging");
+    }
+
+    chargingCompleteRequested.current = false;
     setChargingOpen(true);
+    setChargingRequestLoading(false);
   };
 
   const handleChargingAction = () => {
@@ -334,23 +447,26 @@ export default function StationDetailPage() {
     }
   };
 
-  const handleStopCharging = () => {
-    setChargingOpen(false);
-    setChargingStatus("idle");
-    setChargingProgress(0);
-  };
+  // Stops charging by completing the active session.
+  const handleStopCharging = async () => {
+    if (!station || chargingRequestLoading) return;
+    setChargingRequestLoading(true);
+    setChargingRequestError(null);
 
-  useEffect(() => {
-    if (chargingStatus !== "charging") return;
-    const interval = window.setInterval(() => {
-      setChargingProgress((prev) => {
-        const next = Math.min(100, prev + 4);
-        if (next >= 100) setChargingStatus("done");
-        return next;
-      });
-    }, 700);
-    return () => window.clearInterval(interval);
-  }, [chargingStatus]);
+    const result = await completeChargingSession({ stationId: station.id });
+    if (!result.ok) {
+      setChargingRequestError(result.error || "Could not complete charging.");
+      setChargingRequestLoading(false);
+      return;
+    }
+
+    chargingCompleteRequested.current = true;
+    setChargingOpen(false);
+    setChargingStatus("done");
+    setChargingProgress(100);
+    setTicket(null);
+    setChargingRequestLoading(false);
+  };
 
   useEffect(() => {
     if (isAuthenticated) return;
@@ -361,7 +477,106 @@ export default function StationDetailPage() {
     setChargingOpen(false);
     setChargingProgress(0);
     setChargingStatus("idle");
+    setChargingRequestError(null);
+    setChargingRequestLoading(false);
+    chargingCompleteRequested.current = false;
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!stationId) return;
+    const socketUrl = buildChargingSocketUrl(stationId);
+    if (!socketUrl) return;
+
+    const socket = new WebSocket(socketUrl);
+
+    // Applies WebSocket payloads to charging state.
+    const handleChargingPayload = (payload: Record<string, unknown>) => {
+      const type = toCleanString(payload.type).toLowerCase();
+      const ticketPayload =
+        payload.ticket && typeof payload.ticket === "object"
+          ? (payload.ticket as Record<string, unknown>)
+          : null;
+      const completedTicketPayload =
+        payload.completedTicket && typeof payload.completedTicket === "object"
+          ? (payload.completedTicket as Record<string, unknown>)
+          : null;
+      const progressFromPayload =
+        toProgressPercent(payload.progressPercent) ??
+        toProgressPercent(ticketPayload?.progressPercent) ??
+        toProgressPercent(completedTicketPayload?.progressPercent) ??
+        null;
+
+      if (type === "completed") {
+        setChargingStatus("done");
+        setChargingProgress(progressFromPayload ?? 100);
+        setTicket(null);
+        chargingCompleteRequested.current = true;
+        return;
+      }
+
+      if (type === "initial" && !ticketPayload) {
+        setTicket(null);
+        setChargingStatus("idle");
+        setChargingProgress(0);
+        chargingCompleteRequested.current = false;
+        return;
+      }
+
+      if (ticketPayload) {
+        const normalizedTicket = buildTicketFromServer(
+          ticketPayload,
+          ticketPriceLabel
+        );
+        setTicket(normalizedTicket);
+        if (normalizedTicket.progressPercent != null) {
+          setChargingProgress(normalizedTicket.progressPercent);
+        }
+        if (normalizedTicket.chargingStatus) {
+          setChargingStatus(normalizedTicket.chargingStatus);
+        }
+      }
+
+      if (progressFromPayload != null) {
+        setChargingProgress(progressFromPayload);
+        if (progressFromPayload >= 100) {
+          setChargingStatus("done");
+          if (!chargingCompleteRequested.current) {
+            chargingCompleteRequested.current = true;
+            completeChargingSession({ stationId }).catch(() => {
+              // ignore background completion errors
+            });
+          }
+        }
+      }
+
+      if (type === "started") {
+        setChargingStatus("charging");
+        setChargingOpen(true);
+        chargingCompleteRequested.current = false;
+      }
+
+      if (type === "progress" && progressFromPayload != null) {
+        setChargingStatus("charging");
+      }
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as Record<string, unknown>;
+        handleChargingPayload(payload);
+      } catch {
+        // ignore malformed WebSocket payloads
+      }
+    };
+
+    socket.onerror = () => {
+      socket.close();
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [stationId, ticketPriceLabel]);
 
   const openGoogleMaps = () => {
     if (!station || typeof window === "undefined") return;
@@ -478,6 +693,8 @@ export default function StationDetailPage() {
             chargingActionLabel={chargingActionLabel}
             onChargingAction={handleChargingAction}
             onOpenMaps={openGoogleMaps}
+            chargingError={chargingRequestError}
+            chargingLoading={chargingRequestLoading}
           />
           <PricingSection
             loading={loading}

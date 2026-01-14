@@ -6,12 +6,17 @@ export type PaymentMethod = {
   helper: string;
 };
 
+export type ChargingStatus = "idle" | "charging" | "done";
+
 export type Ticket = {
   id: string;
   methodId: string;
   methodLabel: string;
   priceLabel: string;
   purchasedAt: string;
+  chargingStatus?: ChargingStatus;
+  progressPercent?: number;
+  chargingStartedAt?: string;
+  chargingUpdatedAt?: string;
+  chargingCompletedAt?: string;
 };
-
-export type ChargingStatus = "idle" | "charging" | "done";
