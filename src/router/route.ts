@@ -11,6 +11,7 @@ import Admin from "../pages/Admin";
 import AddStation, { addStationAction } from "../pages/AddStation";
 import EditStation, { editStationAction } from "../pages/EditStation";
 import AddUser, { addUserAction } from "../pages/AddUser";
+import NotFound from "../pages/NotFound";
 import { RedirectIfAuth, RequireAdmin, RequireAuth } from "./guards";
 
 const router = createBrowserRouter([
@@ -70,6 +71,10 @@ const router = createBrowserRouter([
             ],
           },
         ],
+      },
+      {
+        path: "*",
+        Component: NotFound,
       },
     ],
   },
