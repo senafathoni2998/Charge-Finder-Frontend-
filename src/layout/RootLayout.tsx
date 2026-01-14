@@ -1,11 +1,14 @@
-import { Outlet, useLocation, useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate, useNavigation } from "react-router";
 import {
   AppBar,
   Box,
+  Backdrop,
+  CircularProgress,
   Toolbar,
   Typography,
   IconButton,
   Tooltip,
+  Stack,
 } from "@mui/material";
 import ElectricCarIcon from "@mui/icons-material/ElectricCar";
 import PersonIcon from "@mui/icons-material/Person";
@@ -19,12 +22,14 @@ import { setSidebarOpen } from "../features/app/appSlice";
 export default function RootLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const showBack = location.pathname !== "/";
   const isMdUp = useAppSelector((state) => state.app.isMdMode);
   const isAdmin = useAppSelector(
     (state) => state.auth.isAuthenticated && state.auth.role === "admin"
   );
   const dispatch = useAppDispatch();
+  const isRouteLoading = navigation.state === "loading";
   const navTitle = (() => {
     const path = location.pathname;
     if (path === "/") return "ChargeFinder";
@@ -42,6 +47,21 @@ export default function RootLayout() {
 
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
+      <Backdrop
+        open={isRouteLoading}
+        sx={{
+          color: UI.text,
+          zIndex: (theme) => theme.zIndex.modal + 1,
+          backgroundColor: "rgba(246,247,251,0.8)",
+        }}
+      >
+        <Stack spacing={1} alignItems="center">
+          <CircularProgress size={32} sx={{ color: "rgba(124,92,255,0.9)" }} />
+          <Typography sx={{ fontWeight: 700, color: UI.text }}>
+            Loading data...
+          </Typography>
+        </Stack>
+      </Backdrop>
       <AppBar
         position="sticky"
         elevation={0}
