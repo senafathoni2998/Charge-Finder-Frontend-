@@ -1,20 +1,74 @@
 import { createElement } from "react";
 import { createBrowserRouter } from "react-router";
-import App from "../pages/MainPage";
 import RootLayout from "../layout/RootLayout";
-import StationDetail from "../pages/StationDetail";
-import Login, { loginAction } from "../pages/Login";
-import Signup, { signupAction } from "../pages/Signup";
-import Profile, { profileAction, profileLoader } from "../pages/Profile";
-import AddCar, { addCarAction } from "../pages/AddCar";
-import EditCar, { editCarAction } from "../pages/EditCar";
-import Admin from "../pages/Admin";
-import AddStation, { addStationAction } from "../pages/AddStation";
-import EditStation, { editStationAction } from "../pages/EditStation";
-import AddUser, { addUserAction } from "../pages/AddUser";
-import NotFound from "../pages/NotFound";
 import RouteError from "../pages/RouteError";
 import { RedirectIfAuth, RequireAdmin, RequireAuth } from "./guards";
+
+const routeErrorElement = createElement(RouteError);
+
+const lazyMainPage = async () => {
+  const module = await import("../pages/MainPage");
+  return { Component: module.default };
+};
+
+const lazyStationDetail = async () => {
+  const module = await import("../pages/StationDetail");
+  return { Component: module.default };
+};
+
+const lazyProfile = async () => {
+  const module = await import("../pages/Profile");
+  return {
+    Component: module.default,
+    loader: module.profileLoader,
+    action: module.profileAction,
+  };
+};
+
+const lazyAddCar = async () => {
+  const module = await import("../pages/AddCar");
+  return { Component: module.default, action: module.addCarAction };
+};
+
+const lazyEditCar = async () => {
+  const module = await import("../pages/EditCar");
+  return { Component: module.default, action: module.editCarAction };
+};
+
+const lazyAdmin = async () => {
+  const module = await import("../pages/Admin");
+  return { Component: module.default };
+};
+
+const lazyAddStation = async () => {
+  const module = await import("../pages/AddStation");
+  return { Component: module.default, action: module.addStationAction };
+};
+
+const lazyEditStation = async () => {
+  const module = await import("../pages/EditStation");
+  return { Component: module.default, action: module.editStationAction };
+};
+
+const lazyAddUser = async () => {
+  const module = await import("../pages/AddUser");
+  return { Component: module.default, action: module.addUserAction };
+};
+
+const lazyLogin = async () => {
+  const module = await import("../pages/Login");
+  return { Component: module.default, action: module.loginAction };
+};
+
+const lazySignup = async () => {
+  const module = await import("../pages/Signup");
+  return { Component: module.default, action: module.signupAction };
+};
+
+const lazyNotFound = async () => {
+  const module = await import("../pages/NotFound");
+  return { Component: module.default };
+};
 
 const router = createBrowserRouter([
   {
@@ -23,61 +77,54 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        Component: App,
-        errorElement: createElement(RouteError),
+        lazy: lazyMainPage,
+        errorElement: routeErrorElement,
       },
       {
         path: "station/:id",
-        Component: StationDetail,
-        errorElement: createElement(RouteError),
+        lazy: lazyStationDetail,
+        errorElement: routeErrorElement,
       },
       {
         Component: RequireAuth,
         children: [
           {
             path: "profile",
-            Component: Profile,
-            loader: profileLoader,
-            action: profileAction,
-            errorElement: createElement(RouteError),
+            lazy: lazyProfile,
+            errorElement: routeErrorElement,
           },
           {
             path: "profile/cars/new",
-            Component: AddCar,
-            action: addCarAction,
-            errorElement: createElement(RouteError),
+            lazy: lazyAddCar,
+            errorElement: routeErrorElement,
           },
           {
             path: "profile/cars/:carId/edit",
-            Component: EditCar,
-            action: editCarAction,
-            errorElement: createElement(RouteError),
+            lazy: lazyEditCar,
+            errorElement: routeErrorElement,
           },
           {
             Component: RequireAdmin,
             children: [
               {
                 path: "admin",
-                Component: Admin,
-                errorElement: createElement(RouteError),
+                lazy: lazyAdmin,
+                errorElement: routeErrorElement,
               },
               {
                 path: "admin/stations/new",
-                Component: AddStation,
-                action: addStationAction,
-                errorElement: createElement(RouteError),
+                lazy: lazyAddStation,
+                errorElement: routeErrorElement,
               },
               {
                 path: "admin/stations/:stationId/edit",
-                Component: EditStation,
-                action: editStationAction,
-                errorElement: createElement(RouteError),
+                lazy: lazyEditStation,
+                errorElement: routeErrorElement,
               },
               {
                 path: "admin/users/new",
-                Component: AddUser,
-                action: addUserAction,
-                errorElement: createElement(RouteError),
+                lazy: lazyAddUser,
+                errorElement: routeErrorElement,
               },
             ],
           },
@@ -85,8 +132,8 @@ const router = createBrowserRouter([
       },
       {
         path: "*",
-        Component: NotFound,
-        errorElement: createElement(RouteError),
+        lazy: lazyNotFound,
+        errorElement: routeErrorElement,
       },
     ],
   },
@@ -96,9 +143,8 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        Component: Login,
-        action: loginAction,
-        errorElement: createElement(RouteError),
+        lazy: lazyLogin,
+        errorElement: routeErrorElement,
       },
     ],
   },
@@ -108,9 +154,8 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        Component: Signup,
-        action: signupAction,
-        errorElement: createElement(RouteError),
+        lazy: lazySignup,
+        errorElement: routeErrorElement,
       },
     ],
   },
