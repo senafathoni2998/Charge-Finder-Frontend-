@@ -85,6 +85,8 @@ export default function MapCanvas({
     ];
   }, [bounds]);
 
+  console.log("USER LOC IN MAP CANVAS:", userLoc);
+
   return (
     <Box
       sx={{
@@ -194,8 +196,7 @@ export default function MapCanvas({
                 }}
               >
                 <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
-                  {s.name} •{" "}
-                  {isCharging ? `Charging • ${s.status}` : s.status}
+                  {s.name} • {isCharging ? `Charging • ${s.status}` : s.status}
                 </Tooltip>
               </CircleMarker>
             </Fragment>

@@ -32,7 +32,7 @@ export default function useEditStationLoader(
     const loadStation = async () => {
       setLoading(true);
       setError(null);
-      const result = await fetchStations(controller.signal);
+      const result = await fetchStations({ signal: controller.signal });
       if (!active) return;
       if (!result.ok) {
         setStation(null);

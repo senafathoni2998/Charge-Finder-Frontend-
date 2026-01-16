@@ -6,6 +6,13 @@ type FetchStationsResult = {
   error?: string;
 };
 
+type FetchStationsParams = {
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
+  signal?: AbortSignal;
+};
+
 type FetchStationResult = {
   ok: boolean;
   station: Station | null;
@@ -14,7 +21,7 @@ type FetchStationResult = {
 
 // Loads stations from the backend, returning an empty list on failures.
 export const fetchStations = async (
-  signal?: AbortSignal
+  params: FetchStationsParams = {}
 ): Promise<FetchStationsResult> => {
   const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
   if (!baseUrl) {
@@ -22,7 +29,23 @@ export const fetchStations = async (
   }
 
   try {
-    const response = await fetch(`${baseUrl}/stations`, {
+    const { lat, lng, radiusKm, signal } = params;
+    const query = new URLSearchParams();
+    const hasLat = Number.isFinite(lat);
+    const hasLng = Number.isFinite(lng);
+    if (hasLat && hasLng) {
+      query.set("lat", String(lat));
+      query.set("lng", String(lng));
+      if (Number.isFinite(radiusKm)) {
+        query.set("radiusKm", String(radiusKm));
+      }
+    }
+    const queryString = query.toString();
+    const url = queryString
+      ? `${baseUrl}/stations?${queryString}`
+      : `${baseUrl}/stations`;
+
+    const response = await fetch(url, {
       method: "GET",
       credentials: "include",
       signal,

@@ -18,6 +18,7 @@ import FiltersPanel from "./components/FiltersPanel";
 import MapPanel from "./components/MapPanel";
 
 const CHARGING_STATION_REFRESH_MS = 60000;
+const STATION_RADIUS_KM = 5;
 
 export default function MainPage() {
   // Filters are local state (canvas-safe). In your real app, sync them to URL query.
@@ -51,12 +52,24 @@ export default function MainPage() {
     dispatch(setMdMode(isMdUp));
   }, [dispatch, isMdUp]);
 
+  const geo = useGeoLocation();
+  const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
+
+  useEffect(() => {
+    geo.request();
+  }, [geo.request]);
+
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
     const loadStations = async () => {
-      const result = await fetchStations(controller.signal);
+      const result = await fetchStations({
+        signal: controller.signal,
+        lat: userCenter.lat,
+        lng: userCenter.lng,
+        radiusKm: STATION_RADIUS_KM,
+      });
       if (!active) return;
       setStations(result.ok ? result.stations : []);
     };
@@ -66,9 +79,7 @@ export default function MainPage() {
       active = false;
       controller.abort();
     };
-  }, []);
-  const geo = useGeoLocation();
-  const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
+  }, [geo.requestId, userCenter.lat, userCenter.lng]);
   const activeCar = useMemo(() => {
     if (!isAuthenticated) return null;
     return cars.find((c) => c.id === activeCarId) ?? null;

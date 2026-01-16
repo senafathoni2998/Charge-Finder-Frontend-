@@ -63,7 +63,7 @@ export default function useStationManagement(): StationManagementState {
     const loadStations = async () => {
       setStationsLoading(true);
       setStationsError(null);
-      const result = await fetchStations(controller.signal);
+      const result = await fetchStations({ signal: controller.signal });
       if (!active) return;
       if (result.ok) {
         setStations(result.stations);

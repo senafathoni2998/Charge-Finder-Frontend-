@@ -242,7 +242,7 @@ export default function StationDetailPage() {
     const loadStation = async () => {
       setLoading(true);
       setLoadError(null);
-      const result = await fetchStations(controller.signal);
+      const result = await fetchStations({ signal: controller.signal });
       if (!active) return;
       if (!result.ok) {
         setStation(null);
