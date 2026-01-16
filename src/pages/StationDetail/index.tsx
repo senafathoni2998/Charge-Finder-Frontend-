@@ -14,6 +14,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { UI } from "../../theme/theme";
 import { fetchStationById, fetchStations } from "../../api/stations";
 import {
+  cancelChargingSession,
   completeChargingSession,
   startChargingSession,
 } from "../../api/charging";
@@ -199,9 +200,13 @@ export default function StationDetailPage() {
   const [chargingOpen, setChargingOpen] = useState(false);
   const [chargingProgress, setChargingProgress] = useState(0);
   const [chargingStatus, setChargingStatus] = useState<ChargingStatus>("idle");
+  const [chargingCancelled, setChargingCancelled] = useState(false);
   const [chargingRequestLoading, setChargingRequestLoading] = useState(false);
   const [chargingRequestError, setChargingRequestError] = useState<
     string | null
+  >(null);
+  const [chargingBatteryPercent, setChargingBatteryPercent] = useState<
+    number | null
   >(null);
   const [startChargingOpen, setStartChargingOpen] = useState(false);
   const [selectedConnectorType, setSelectedConnectorType] = useState<
@@ -273,6 +278,10 @@ export default function StationDetailPage() {
   const remainingMinutes = Math.max(
     0,
     Math.ceil(((100 - chargingProgress) / 100) * TOTAL_CHARGE_MINUTES)
+  );
+  const displayChargingPercent = useMemo(
+    () => chargingBatteryPercent ?? chargingProgress,
+    [chargingBatteryPercent, chargingProgress]
   );
   const estimatedRemainingMinutes = useMemo(() => {
     if (!estimatedCompletionAt) return null;
@@ -428,6 +437,17 @@ export default function StationDetailPage() {
     return false;
   }, [invalidateSession, isAuthenticated]);
 
+  const getVehicleBatteryPercent = useCallback(
+    (vehicleId?: string | null) => {
+      const targetId = vehicleId ?? activeCarId ?? null;
+      if (!targetId) return null;
+      const vehicle = cars.find((car) => car.id === targetId);
+      const percent = vehicle?.batteryPercent ?? null;
+      return Number.isFinite(percent as number) ? Number(percent) : null;
+    },
+    [activeCarId, cars]
+  );
+
   const refreshStation = useCallback(async () => {
     if (!stationId) return;
     const result = await fetchStationById(stationId);
@@ -486,6 +506,8 @@ export default function StationDetailPage() {
     if (!canStartCharging || !station || chargingRequestLoading) return;
     setChargingRequestLoading(true);
     setChargingRequestError(null);
+    setChargingCancelled(false);
+    const initialBatteryPercent = getVehicleBatteryPercent(vehicleId);
 
     const result = await startChargingSession({
       stationId: station.id,
@@ -494,16 +516,29 @@ export default function StationDetailPage() {
     });
     if (!result.ok) {
       setChargingRequestError(result.error || "Could not start charging.");
+      setChargingBatteryPercent(null);
       setChargingRequestLoading(false);
       return;
     }
 
     if (result.ticket && typeof result.ticket === "object") {
+      const ticketPayload = result.ticket as Record<string, unknown>;
+      const batteryPercentFromTicket =
+        toProgressPercent(ticketPayload.batteryPercentage) ??
+        toProgressPercent(ticketPayload.battery_percent) ??
+        null;
       const normalizedTicket = buildTicketFromServer(
-        result.ticket as Record<string, unknown>,
+        ticketPayload,
         ticketPriceLabel
       );
       setTicket(normalizedTicket);
+      if (batteryPercentFromTicket != null) {
+        setChargingBatteryPercent(batteryPercentFromTicket);
+      } else if (initialBatteryPercent != null) {
+        setChargingBatteryPercent(initialBatteryPercent);
+      } else {
+        setChargingBatteryPercent(null);
+      }
       if (normalizedTicket.progressPercent != null) {
         setChargingProgress(normalizedTicket.progressPercent);
       } else {
@@ -517,6 +552,11 @@ export default function StationDetailPage() {
     } else {
       setChargingProgress(0);
       setChargingStatus("charging");
+      if (initialBatteryPercent != null) {
+        setChargingBatteryPercent(initialBatteryPercent);
+      } else {
+        setChargingBatteryPercent(null);
+      }
     }
 
     chargingCompleteRequested.current = false;
@@ -567,27 +607,54 @@ export default function StationDetailPage() {
     if (chargingStatus === "done") {
       setChargingStatus("idle");
       setChargingProgress(0);
+      setChargingCancelled(false);
     }
   };
 
-  // Stops charging by completing the active session.
+  // Stops charging by cancelling the active session.
   const handleStopCharging = async () => {
     if (!ensureSessionValid()) return;
     if (!station || chargingRequestLoading) return;
     setChargingRequestLoading(true);
     setChargingRequestError(null);
 
-    const result = await completeChargingSession({ stationId: station.id });
+    let result = await cancelChargingSession({ stationId: station.id });
     if (!result.ok) {
-      setChargingRequestError(result.error || "Could not complete charging.");
-      setChargingRequestLoading(false);
-      return;
+      const fallback = await completeChargingSession({
+        stationId: station.id,
+        cancel: true,
+      });
+      if (!fallback.ok) {
+        setChargingRequestError(
+          fallback.error || result.error || "Could not stop charging."
+        );
+        setChargingRequestLoading(false);
+        return;
+      }
+      result = fallback;
+    }
+
+    if (result.ticket && typeof result.ticket === "object") {
+      const ticketPayload = result.ticket as Record<string, unknown>;
+      const progressFromTicket =
+        toProgressPercent(ticketPayload.progressPercent) ??
+        toProgressPercent(ticketPayload.progress_percent) ??
+        null;
+      const batteryPercentFromTicket =
+        toProgressPercent(ticketPayload.batteryPercentage) ??
+        toProgressPercent(ticketPayload.battery_percent) ??
+        null;
+      if (progressFromTicket != null) {
+        setChargingProgress(progressFromTicket);
+      }
+      if (batteryPercentFromTicket != null) {
+        setChargingBatteryPercent(batteryPercentFromTicket);
+      }
     }
 
     chargingCompleteRequested.current = true;
-    setChargingOpen(false);
     setChargingStatus("done");
-    setChargingProgress(100);
+    setChargingCancelled(true);
     setTicket(null);
     setEstimatedCompletionAt(null);
     await refreshStation();
@@ -603,9 +670,11 @@ export default function StationDetailPage() {
     setChargingOpen(false);
     setChargingProgress(0);
     setChargingStatus("idle");
+    setChargingCancelled(false);
     setChargingRequestError(null);
     setChargingRequestLoading(false);
     setEstimatedCompletionAt(null);
+    setChargingBatteryPercent(null);
     chargingCompleteRequested.current = false;
   }, [isAuthenticated]);
 
@@ -627,10 +696,25 @@ export default function StationDetailPage() {
         payload.completedTicket && typeof payload.completedTicket === "object"
           ? (payload.completedTicket as Record<string, unknown>)
           : null;
+      const cancelledTicketPayload =
+        payload.cancelledTicket && typeof payload.cancelledTicket === "object"
+          ? (payload.cancelledTicket as Record<string, unknown>)
+          : null;
       const progressFromPayload =
         toProgressPercent(payload.progressPercent) ??
         toProgressPercent(ticketPayload?.progressPercent) ??
         toProgressPercent(completedTicketPayload?.progressPercent) ??
+        toProgressPercent(cancelledTicketPayload?.progressPercent) ??
+        null;
+      const batteryPercentFromPayload =
+        toProgressPercent(payload.batteryPercentage) ??
+        toProgressPercent(payload.battery_percent) ??
+        toProgressPercent(ticketPayload?.batteryPercentage) ??
+        toProgressPercent(ticketPayload?.battery_percent) ??
+        toProgressPercent(completedTicketPayload?.batteryPercentage) ??
+        toProgressPercent(completedTicketPayload?.battery_percent) ??
+        toProgressPercent(cancelledTicketPayload?.batteryPercentage) ??
+        toProgressPercent(cancelledTicketPayload?.battery_percent) ??
         null;
       const estimatedCompletionMs =
         toDateMs(payload.estimatedCompletionAt) ??
@@ -639,11 +723,31 @@ export default function StationDetailPage() {
         toDateMs(ticketPayload?.estimatedCompletionAt) ??
         toDateMs(ticketPayload?.estimateeedCompletionAt) ??
         toDateMs(ticketPayload?.estimated_completion_at) ??
+        toDateMs(cancelledTicketPayload?.estimatedCompletionAt) ??
+        toDateMs(cancelledTicketPayload?.estimateeedCompletionAt) ??
+        toDateMs(cancelledTicketPayload?.estimated_completion_at) ??
         null;
 
       if (type === "completed") {
         setChargingStatus("done");
+        setChargingCancelled(false);
         setChargingProgress(progressFromPayload ?? 100);
+        setTicket(null);
+        setEstimatedCompletionAt(null);
+        setChargingBatteryPercent(batteryPercentFromPayload ?? 100);
+        chargingCompleteRequested.current = true;
+        return;
+      }
+
+      if (type === "cancelled" || type === "canceled") {
+        setChargingStatus("done");
+        setChargingCancelled(true);
+        if (progressFromPayload != null) {
+          setChargingProgress(progressFromPayload);
+        }
+        if (batteryPercentFromPayload != null) {
+          setChargingBatteryPercent(batteryPercentFromPayload);
+        }
         setTicket(null);
         setEstimatedCompletionAt(null);
         chargingCompleteRequested.current = true;
@@ -655,6 +759,8 @@ export default function StationDetailPage() {
         setChargingStatus("idle");
         setChargingProgress(0);
         setEstimatedCompletionAt(null);
+        setChargingBatteryPercent(null);
+        setChargingCancelled(false);
         chargingCompleteRequested.current = false;
         return;
       }
@@ -677,6 +783,7 @@ export default function StationDetailPage() {
         setChargingProgress(progressFromPayload);
         if (progressFromPayload >= 100) {
           setChargingStatus("done");
+          setChargingCancelled(false);
           if (!chargingCompleteRequested.current) {
             chargingCompleteRequested.current = true;
             completeChargingSession({ stationId }).catch(() => {
@@ -686,18 +793,24 @@ export default function StationDetailPage() {
         }
       }
 
+      if (batteryPercentFromPayload != null) {
+        setChargingBatteryPercent(batteryPercentFromPayload);
+      }
+
       if (estimatedCompletionMs != null) {
         setEstimatedCompletionAt(estimatedCompletionMs);
       }
 
       if (type === "started") {
         setChargingStatus("charging");
+        setChargingCancelled(false);
         setChargingOpen(true);
         chargingCompleteRequested.current = false;
       }
 
       if (type === "progress" && progressFromPayload != null) {
         setChargingStatus("charging");
+        setChargingCancelled(false);
       }
     };
 
@@ -870,7 +983,9 @@ export default function StationDetailPage() {
         onClose={handleCloseCharging}
         onStop={handleStopCharging}
         chargingStatus={chargingStatus}
+        chargingCancelled={chargingCancelled}
         chargingProgress={chargingProgress}
+        displayProgress={displayChargingPercent}
         ticket={ticket}
         ticketKwh={TICKET_KWH}
         deliveredKwh={deliveredKwh}

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -18,7 +19,9 @@ type ChargingDialogProps = {
   onClose: () => void;
   onStop: () => void;
   chargingStatus: ChargingStatus;
+  chargingCancelled?: boolean;
   chargingProgress: number;
+  displayProgress?: number;
   ticket: Ticket | null;
   ticketKwh: number;
   deliveredKwh: number;
@@ -32,7 +35,9 @@ export default function ChargingDialog({
   onClose,
   onStop,
   chargingStatus,
+  chargingCancelled = false,
   chargingProgress,
+  displayProgress,
   ticket,
   ticketKwh,
   deliveredKwh,
@@ -40,11 +45,32 @@ export default function ChargingDialog({
   estimatedRemainingMinutes,
 }: ChargingDialogProps) {
   const isCharging = chargingStatus === "charging";
+  const isCancelled = chargingStatus === "done" && chargingCancelled;
+  const [confirmStopOpen, setConfirmStopOpen] = useState(false);
+  const progressPercent =
+    typeof displayProgress === "number" && Number.isFinite(displayProgress)
+      ? displayProgress
+      : chargingProgress;
   const effectiveRemainingMinutes =
     typeof estimatedRemainingMinutes === "number" &&
     Number.isFinite(estimatedRemainingMinutes)
       ? Math.max(0, estimatedRemainingMinutes)
       : remainingMinutes;
+
+  useEffect(() => {
+    if (!open || !isCharging) {
+      setConfirmStopOpen(false);
+    }
+  }, [open, isCharging]);
+
+  const handleStopRequest = () => {
+    setConfirmStopOpen(true);
+  };
+
+  const handleConfirmStop = () => {
+    setConfirmStopOpen(false);
+    onStop();
+  };
 
   return (
     <Dialog
@@ -63,14 +89,18 @@ export default function ChargingDialog({
       }}
     >
       <DialogTitle sx={{ fontWeight: 950 }}>
-        {chargingStatus === "done"
+        {isCancelled
+          ? "Charging stopped"
+          : chargingStatus === "done"
           ? "Charging complete"
           : "Charging in progress"}
       </DialogTitle>
       <DialogContent dividers sx={{ borderColor: UI.border2 }}>
         <Stack spacing={2}>
           <Typography variant="body2" sx={{ color: UI.text2 }}>
-            {chargingStatus === "done"
+            {isCancelled
+              ? "Charging stopped. You can unplug when it is safe."
+              : chargingStatus === "done"
               ? "Session complete. You can unplug when it is safe."
               : "Keep the connector plugged in while we deliver your ticket."}
           </Typography>
@@ -89,15 +119,17 @@ export default function ChargingDialog({
                 alignItems="center"
               >
                 <Typography sx={{ fontWeight: 900, color: UI.text }}>
-                  {chargingProgress}%
+                  Battery {progressPercent}%
                 </Typography>
-                <Typography variant="caption" sx={{ color: UI.text2 }}>
-                  {deliveredKwh} / {ticketKwh} kWh
-                </Typography>
+                {!isCharging ? (
+                  <Typography variant="caption" sx={{ color: UI.text2 }}>
+                    {deliveredKwh} / {ticketKwh} kWh
+                  </Typography>
+                ) : null}
               </Stack>
               <LinearProgress
                 variant="determinate"
-                value={chargingProgress}
+                value={progressPercent}
                 sx={{
                   height: 10,
                   borderRadius: 999,
@@ -110,7 +142,9 @@ export default function ChargingDialog({
               />
               <Typography variant="caption" sx={{ color: UI.text3 }}>
                 {chargingStatus === "done"
-                  ? "Charging complete."
+                  ? isCancelled
+                    ? "Charging stopped."
+                    : "Charging complete."
                   : `Estimated time remaining: ${
                       effectiveRemainingMinutes || ""
                     } ${effectiveRemainingMinutes > 0 ? "min" : ""} `}
@@ -158,7 +192,7 @@ export default function ChargingDialog({
           <>
             <Button
               variant="outlined"
-              onClick={onStop}
+              onClick={handleStopRequest}
               sx={{
                 textTransform: "none",
                 borderRadius: 3,
@@ -196,6 +230,58 @@ export default function ChargingDialog({
           </Button>
         )}
       </DialogActions>
+      <Dialog
+        open={confirmStopOpen}
+        onClose={() => setConfirmStopOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            backgroundColor: UI.surface,
+            border: `1px solid ${UI.border}`,
+            color: UI.text,
+            boxShadow: "0 24px 70px rgba(10,10,16,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 950 }}>Stop charging?</DialogTitle>
+        <DialogContent dividers sx={{ borderColor: UI.border2 }}>
+          <Stack spacing={1}>
+            <Typography variant="body2" sx={{ color: UI.text2 }}>
+              Stopping ends this session and the ticket cannot be reused.
+            </Typography>
+            <Typography variant="body2" sx={{ color: UI.text2 }}>
+              You will need to buy a new ticket to charge again.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setConfirmStopOpen(false)}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+              borderColor: UI.border,
+              color: UI.text,
+            }}
+          >
+            Keep charging
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmStop}
+            sx={{
+              textTransform: "none",
+              borderRadius: 3,
+            }}
+          >
+            Stop charging
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }
