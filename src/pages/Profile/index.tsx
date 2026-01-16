@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Alert, Box, Snackbar, Stack, Typography } from "@mui/material";
 import { useActionData, useLoaderData, useNavigate } from "react-router";
 import { UI } from "../../theme/theme";
@@ -9,6 +9,7 @@ import {
   setCars,
   updateProfile,
 } from "../../features/auth/authSlice";
+import type { UserCar } from "../../features/auth/authSlice";
 import { passwordIssue, strengthLabel } from "../../utils/validate";
 import type { ProfileActionData, ProfileLoaderData } from "./types";
 import {
@@ -16,12 +17,49 @@ import {
   persistProfileToStorage,
 } from "./profileStorage";
 import { deleteVehicleRequest, setActiveVehicleRequest } from "./vehicleRequests";
+import { fetchVehicleById } from "../../api/vehicles";
 import ProfileOverviewCard from "./components/ProfileOverviewCard";
 import CarsCard from "./components/CarsCard";
 import EditProfileDialog from "./components/EditProfileDialog";
 import ChangePasswordDialog from "./components/ChangePasswordDialog";
 
 export { profileAction, profileLoader } from "./profileRoute";
+
+const CHARGING_VEHICLE_REFRESH_MS = 60000;
+
+const normalizeVehicle = (vehicle: unknown): UserCar | null => {
+  if (!vehicle || typeof vehicle !== "object") return null;
+  const data = vehicle as Record<string, unknown>;
+  const id =
+    typeof data.id === "string"
+      ? data.id.trim()
+      : typeof data.id === "number"
+      ? String(data.id)
+      : "";
+  if (!id) return null;
+  const name =
+    typeof data.name === "string" && data.name.trim()
+      ? data.name.trim()
+      : "My EV";
+  const connectorTypes = Array.isArray(data.connector_type)
+    ? (data.connector_type as UserCar["connectorTypes"])
+    : [];
+  const minKW = Number.isFinite(Number(data.min_power))
+    ? Number(data.min_power)
+    : 0;
+  const chargingStatus =
+    typeof data.chargingStatus === "string" && data.chargingStatus.trim()
+      ? data.chargingStatus.trim()
+      : typeof data.charging_status === "string" &&
+        data.charging_status.trim()
+      ? data.charging_status.trim()
+      : null;
+  return { id, name, connectorTypes, minKW, chargingStatus };
+};
+
+const isVehicleCharging = (car: UserCar) =>
+  typeof car.chargingStatus === "string" &&
+  car.chargingStatus.trim().toUpperCase() === "CHARGING";
 
 // Profile page container that wires data, dialogs, and subcomponents together.
 export default function ProfilePage() {
@@ -46,6 +84,15 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordToast, setPasswordToast] = useState<string | null>(null);
   const [carError, setCarError] = useState<string | null>(null);
+  const carsRef = useRef(cars);
+  const chargingVehicleId = useMemo(
+    () => cars.find(isVehicleCharging)?.id ?? null,
+    [cars]
+  );
+
+  useEffect(() => {
+    carsRef.current = cars;
+  }, [cars]);
 
   const newPwIssue = useMemo(() => passwordIssue(newPassword), [newPassword]);
   const newPwStrength = useMemo(
@@ -129,29 +176,8 @@ export default function ProfilePage() {
 
     if (!Array.isArray(vehicles)) return;
     const remappedVehicles = vehicles
-      .map((v: any) => {
-        const chargingStatus =
-          typeof v.chargingStatus === "string" && v.chargingStatus.trim()
-            ? v.chargingStatus.trim()
-            : typeof v.charging_status === "string" &&
-              v.charging_status.trim()
-            ? v.charging_status.trim()
-            : null;
-        return {
-          id:
-            typeof v.id === "string"
-              ? v.id.trim()
-              : typeof v.id === "number"
-              ? String(v.id)
-              : "",
-          name:
-            typeof v.name === "string" && v.name.trim() ? v.name.trim() : "My EV",
-          connectorTypes: Array.isArray(v.connector_type) ? v.connector_type : [],
-          minKW: Number.isFinite(Number(v.min_power)) ? Number(v.min_power) : 0,
-          chargingStatus,
-        };
-      })
-      .filter((car) => car.id);
+      .map((v: unknown) => normalizeVehicle(v))
+      .filter((car): car is UserCar => !!car);
     const nextActiveId =
       storedActiveId &&
       remappedVehicles.some((car) => car.id === storedActiveId)
@@ -202,6 +228,52 @@ export default function ProfilePage() {
       }
     }
   }, [actionData, dispatch]);
+
+  useEffect(() => {
+    if (!chargingVehicleId) return;
+    let active = true;
+    let controller: AbortController | null = null;
+    let isLoading = false;
+
+    const refreshChargingVehicle = async () => {
+      if (isLoading) return;
+      isLoading = true;
+      const nextController = new AbortController();
+      controller = nextController;
+      const result = await fetchVehicleById(
+        chargingVehicleId,
+        nextController.signal
+      );
+      if (!active) return;
+      if (result.ok && result.vehicle) {
+        const normalized = normalizeVehicle(result.vehicle);
+        if (normalized) {
+          const nextCars = carsRef.current.map((car) =>
+            car.id === normalized.id ? { ...car, ...normalized } : car
+          );
+          dispatch(
+            setCars({
+              cars: nextCars,
+              activeCarId,
+            })
+          );
+          persistCarsToStorage(nextCars, activeCarId);
+        }
+      }
+      isLoading = false;
+    };
+
+    refreshChargingVehicle();
+    const intervalId = window.setInterval(
+      refreshChargingVehicle,
+      CHARGING_VEHICLE_REFRESH_MS
+    );
+    return () => {
+      active = false;
+      controller?.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [activeCarId, chargingVehicleId, dispatch]);
 
   const handleOpenPasswordEditor = () => {
     setCurrentPassword("");

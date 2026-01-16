@@ -92,5 +92,10 @@ export function filterStations(stations, filters, userCenter) {
       const distanceKm = haversineKm(userCenter, { lat: s.lat, lng: s.lng });
       return { ...s, distanceKm };
     })
-    .sort((a, b) => a.distanceKm - b.distanceKm);
+    .sort((a, b) => {
+      const chargingDelta =
+        Number(Boolean(b.isChargingHere)) - Number(Boolean(a.isChargingHere));
+      if (chargingDelta !== 0) return chargingDelta;
+      return a.distanceKm - b.distanceKm;
+    });
 }
