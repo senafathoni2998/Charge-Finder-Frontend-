@@ -9,6 +9,7 @@ import {
 } from "@mui/material";
 import { UI } from "../../../theme/theme";
 import type { UserCar } from "../../../features/auth/authSlice";
+import { minutesAgo } from "../../../utils/time";
 
 type CarsCardProps = {
   cars: UserCar[];
@@ -81,6 +82,13 @@ export default function CarsCard({
                 const isCharging =
                   typeof car.chargingStatus === "string" &&
                   car.chargingStatus.trim().toUpperCase() === "CHARGING";
+                const hasBatteryPercent = Number.isFinite(car.batteryPercent);
+                const hasBatteryStatus =
+                  typeof car.batteryStatus === "string" &&
+                  car.batteryStatus.trim().length > 0;
+                const hasBatteryUpdatedAt =
+                  typeof car.lastBatteryUpdatedAt === "string" &&
+                  car.lastBatteryUpdatedAt.trim().length > 0;
                 console.log("Rendering car:", car, "isActive:", isActive);
                 return (
                   <Box
@@ -197,6 +205,39 @@ export default function CarsCard({
                           </Typography>
                         ) : null}
                       </Stack>
+
+                      {hasBatteryPercent || hasBatteryStatus || hasBatteryUpdatedAt ? (
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          sx={{ flexWrap: "wrap" }}
+                        >
+                          {hasBatteryPercent ? (
+                            <Chip
+                              size="small"
+                              label={`Battery ${car.batteryPercent}%`}
+                              sx={{
+                                borderRadius: 999,
+                                backgroundColor: "rgba(0,200,83,0.12)",
+                                border: "1px solid rgba(0,200,83,0.35)",
+                                color: UI.text,
+                                fontWeight: 700,
+                              }}
+                            />
+                          ) : null}
+                          {hasBatteryStatus ? (
+                            <Typography variant="caption" sx={{ color: UI.text2 }}>
+                              {car.batteryStatus}
+                            </Typography>
+                          ) : null}
+                          {hasBatteryUpdatedAt ? (
+                            <Typography variant="caption" sx={{ color: UI.text3 }}>
+                              Updated {minutesAgo(car.lastBatteryUpdatedAt)}m ago
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                      ) : null}
 
                       <Typography variant="caption" sx={{ color: UI.text2 }}>
                         Preferred minimum power: {car.minKW || 0} kW

@@ -8,14 +8,18 @@ const MiniPhoto = ({
   label: string;
   gradient: string;
 }) => {
+  const background =
+    typeof gradient === "string" && gradient.trim() ? gradient : UI.brandGrad;
   return (
     <Box
       sx={{
         height: 140,
+        flex: 1,
+        minWidth: 0,
         borderRadius: 4,
         overflow: "hidden",
         border: `1px solid ${UI.border2}`,
-        background: gradient,
+        background,
         position: "relative",
       }}
       aria-label={label}

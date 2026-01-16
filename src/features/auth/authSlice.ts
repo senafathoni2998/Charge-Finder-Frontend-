@@ -20,6 +20,10 @@ export type UserCar = {
   connectorTypes: ConnectorType[];
   minKW: number;
   chargingStatus?: string | null;
+  batteryPercent?: number | null;
+  batteryStatus?: string | null;
+  lastBatteryUpdatedAt?: string | null;
+  isActive?: boolean;
 };
 
 const VALID_CONNECTORS = new Set<ConnectorType>(["CCS2", "Type2", "CHAdeMO"]);
@@ -49,7 +53,43 @@ const sanitizeCar = (data: unknown): UserCar | null => {
     typeof raw.chargingStatus === "string" && raw.chargingStatus.trim()
       ? raw.chargingStatus.trim()
       : null;
-  return { id, name, connectorTypes, minKW, chargingStatus };
+  const isActive =
+    typeof raw.isActive === "boolean"
+      ? raw.isActive
+      : typeof (raw as { active?: unknown }).active === "boolean"
+      ? Boolean((raw as { active?: unknown }).active)
+      : typeof (raw as { is_active?: unknown }).is_active === "boolean"
+      ? Boolean((raw as { is_active?: unknown }).is_active)
+      : false;
+  const batteryPercentRaw =
+    typeof raw.batteryPercent === "number"
+      ? raw.batteryPercent
+    : typeof raw.batteryPercent === "string"
+      ? Number(raw.batteryPercent)
+      : Number.NaN;
+  const batteryPercent = Number.isFinite(batteryPercentRaw)
+    ? Number(batteryPercentRaw)
+    : null;
+  const batteryStatus =
+    typeof raw.batteryStatus === "string" && raw.batteryStatus.trim()
+      ? raw.batteryStatus.trim()
+      : null;
+  const lastBatteryUpdatedAt =
+    typeof raw.lastBatteryUpdatedAt === "string" &&
+    raw.lastBatteryUpdatedAt.trim()
+      ? raw.lastBatteryUpdatedAt.trim()
+      : null;
+  return {
+    id,
+    name,
+    connectorTypes,
+    minKW,
+    chargingStatus,
+    batteryPercent,
+    batteryStatus,
+    lastBatteryUpdatedAt,
+    isActive,
+  };
 };
 
 const parseCars = (raw: string | null): UserCar[] => {
@@ -79,7 +119,17 @@ const parseLegacyCar = (raw: string | null): UserCar | null => {
       : [];
     const minKW = Number.isFinite(data.minKW) ? Number(data.minKW) : 0;
     const id = `car-${Date.now()}`;
-    return { id, name, connectorTypes, minKW, chargingStatus: null };
+    return {
+      id,
+      name,
+      connectorTypes,
+      minKW,
+      chargingStatus: null,
+      batteryPercent: null,
+      batteryStatus: null,
+      lastBatteryUpdatedAt: null,
+      isActive: false,
+    };
   } catch {
     return null;
   }

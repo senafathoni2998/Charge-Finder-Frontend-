@@ -54,7 +54,53 @@ const normalizeVehicle = (vehicle: unknown): UserCar | null => {
         data.charging_status.trim()
       ? data.charging_status.trim()
       : null;
-  return { id, name, connectorTypes, minKW, chargingStatus };
+  const isActive =
+    typeof data.isActive === "boolean"
+      ? data.isActive
+      : typeof data.active === "boolean"
+      ? data.active
+      : typeof data.is_active === "boolean"
+      ? data.is_active
+      : false;
+  const batteryPercentRaw =
+    typeof data.batteryPercent === "number"
+      ? data.batteryPercent
+      : typeof data.batteryPercent === "string"
+      ? Number(data.batteryPercent)
+      : typeof data.battery_percent === "number"
+      ? data.battery_percent
+      : typeof data.battery_percent === "string"
+      ? Number(data.battery_percent)
+      : Number.NaN;
+  const batteryPercent = Number.isFinite(batteryPercentRaw)
+    ? Number(batteryPercentRaw)
+    : null;
+  const batteryStatus =
+    typeof data.batteryStatus === "string" && data.batteryStatus.trim()
+      ? data.batteryStatus.trim()
+      : typeof data.battery_status === "string" &&
+        data.battery_status.trim()
+      ? data.battery_status.trim()
+      : null;
+  const lastBatteryUpdatedAt =
+    typeof data.lastBatteryUpdatedAt === "string" &&
+    data.lastBatteryUpdatedAt.trim()
+      ? data.lastBatteryUpdatedAt.trim()
+      : typeof data.last_battery_updated_at === "string" &&
+        data.last_battery_updated_at.trim()
+      ? data.last_battery_updated_at.trim()
+      : null;
+  return {
+    id,
+    name,
+    connectorTypes,
+    minKW,
+    chargingStatus,
+    batteryPercent,
+    batteryStatus,
+    lastBatteryUpdatedAt,
+    isActive,
+  };
 };
 
 const isVehicleCharging = (car: UserCar) =>
@@ -178,11 +224,14 @@ export default function ProfilePage() {
     const remappedVehicles = vehicles
       .map((v: unknown) => normalizeVehicle(v))
       .filter((car): car is UserCar => !!car);
+    const serverActiveId =
+      remappedVehicles.find((car) => car.isActive)?.id ?? null;
     const nextActiveId =
-      storedActiveId &&
+      serverActiveId ||
+      (storedActiveId &&
       remappedVehicles.some((car) => car.id === storedActiveId)
         ? storedActiveId
-        : remappedVehicles[0]?.id ?? null;
+        : remappedVehicles[0]?.id ?? null);
     dispatch(
       setCars({
         cars: remappedVehicles,
