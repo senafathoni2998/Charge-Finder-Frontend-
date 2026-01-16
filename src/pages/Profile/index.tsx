@@ -18,14 +18,46 @@ import {
 } from "./profileStorage";
 import { deleteVehicleRequest, setActiveVehicleRequest } from "./vehicleRequests";
 import { fetchVehicleById } from "../../api/vehicles";
+import { fetchChargingHistory } from "../../api/chargingHistory";
 import ProfileOverviewCard from "./components/ProfileOverviewCard";
 import CarsCard from "./components/CarsCard";
 import EditProfileDialog from "./components/EditProfileDialog";
 import ChangePasswordDialog from "./components/ChangePasswordDialog";
+import ChargingHistoryCard, {
+  type ChargingHistoryItem,
+} from "./components/ChargingHistoryCard";
 
 export { profileAction, profileLoader } from "./profileRoute";
 
 const CHARGING_VEHICLE_REFRESH_MS = 60000;
+
+const toCleanString = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+};
+
+const toProgressPercent = (value: unknown): number | null => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.min(100, Math.max(0, Math.round(num)));
+};
+
+const toDateMs = (value: unknown): number | null => {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return value > 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+};
 
 const normalizeVehicle = (vehicle: unknown): UserCar | null => {
   if (!vehicle || typeof vehicle !== "object") return null;
@@ -103,6 +135,42 @@ const normalizeVehicle = (vehicle: unknown): UserCar | null => {
   };
 };
 
+const normalizeHistoryItem = (
+  historyItem: unknown,
+  index: number
+): ChargingHistoryItem | null => {
+  if (!historyItem || typeof historyItem !== "object") return null;
+  const data = historyItem as Record<string, unknown>;
+  const id =
+    toCleanString(data.id ?? data._id) || `history-${Date.now()}-${index}`;
+  const endedAt = toDateMs(data.endedAt ?? data.ended_at);
+  const outcomeRaw = toCleanString(data.outcome).toUpperCase();
+  const stationName = toCleanString(data.stationName ?? data.station_name);
+  const stationAddress = toCleanString(
+    data.stationAddress ?? data.station_address
+  );
+  const vehicleName = toCleanString(data.vehicleName ?? data.vehicle_name);
+  const progressPercent =
+    toProgressPercent(data.progressPercent ?? data.progress_percent) ?? null;
+  const batteryPercentage =
+    toProgressPercent(data.batteryPercentage ?? data.battery_percentage) ?? null;
+  const connectorType = toCleanString(
+    data.connectorType ?? data.connector_type
+  );
+
+  return {
+    id,
+    endedAt,
+    outcome: outcomeRaw || null,
+    stationName,
+    stationAddress,
+    vehicleName,
+    progressPercent,
+    batteryPercentage,
+    connectorType: connectorType || null,
+  };
+};
+
 const isVehicleCharging = (car: UserCar) =>
   typeof car.chargingStatus === "string" &&
   car.chargingStatus.trim().toUpperCase() === "CHARGING";
@@ -113,6 +181,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const loaderData = useLoaderData() as ProfileLoaderData | null;
   const actionData = useActionData() as ProfileActionData | undefined;
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const email = useAppSelector((state) => state.auth.email);
   const userId = useAppSelector((state) => state.auth.userId);
   const profileName = useAppSelector((state) => state.auth.name);
@@ -130,6 +199,9 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordToast, setPasswordToast] = useState<string | null>(null);
   const [carError, setCarError] = useState<string | null>(null);
+  const [historyItems, setHistoryItems] = useState<ChargingHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const carsRef = useRef(cars);
   const chargingVehicleId = useMemo(
     () => cars.find(isVehicleCharging)?.id ?? null,
@@ -139,6 +211,42 @@ export default function ProfilePage() {
   useEffect(() => {
     carsRef.current = cars;
   }, [cars]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHistoryItems([]);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    const loadChargingHistory = async () => {
+      const result = await fetchChargingHistory(controller.signal);
+      if (!active) return;
+      if (!result.ok) {
+        setHistoryError(result.error || "Could not load charging history.");
+        setHistoryItems([]);
+        setHistoryLoading(false);
+        return;
+      }
+      const normalized = result.history
+        .map((item, index) => normalizeHistoryItem(item, index))
+        .filter((item): item is ChargingHistoryItem => !!item);
+      setHistoryItems(normalized);
+      setHistoryLoading(false);
+    };
+
+    loadChargingHistory();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isAuthenticated]);
 
   const newPwIssue = useMemo(() => passwordIssue(newPassword), [newPassword]);
   const newPwStrength = useMemo(
@@ -450,6 +558,12 @@ export default function ProfilePage() {
             onSetActive={handleSetActive}
             onRemove={handleRemoveCar}
             onEdit={handleEditCar}
+          />
+
+          <ChargingHistoryCard
+            items={historyItems}
+            loading={historyLoading}
+            error={historyError}
           />
         </Stack>
       </Box>
