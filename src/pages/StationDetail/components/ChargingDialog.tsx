@@ -23,6 +23,7 @@ type ChargingDialogProps = {
   ticketKwh: number;
   deliveredKwh: number;
   remainingMinutes: number;
+  estimatedRemainingMinutes?: number | null;
 };
 
 // Renders the live charging progress dialog.
@@ -36,8 +37,14 @@ export default function ChargingDialog({
   ticketKwh,
   deliveredKwh,
   remainingMinutes,
+  estimatedRemainingMinutes,
 }: ChargingDialogProps) {
   const isCharging = chargingStatus === "charging";
+  const effectiveRemainingMinutes =
+    typeof estimatedRemainingMinutes === "number" &&
+    Number.isFinite(estimatedRemainingMinutes)
+      ? Math.max(0, estimatedRemainingMinutes)
+      : remainingMinutes;
 
   return (
     <Dialog
@@ -56,7 +63,9 @@ export default function ChargingDialog({
       }}
     >
       <DialogTitle sx={{ fontWeight: 950 }}>
-        {chargingStatus === "done" ? "Charging complete" : "Charging in progress"}
+        {chargingStatus === "done"
+          ? "Charging complete"
+          : "Charging in progress"}
       </DialogTitle>
       <DialogContent dividers sx={{ borderColor: UI.border2 }}>
         <Stack spacing={2}>
@@ -74,7 +83,11 @@ export default function ChargingDialog({
             }}
           >
             <Stack spacing={1}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+              >
                 <Typography sx={{ fontWeight: 900, color: UI.text }}>
                   {chargingProgress}%
                 </Typography>
@@ -98,7 +111,9 @@ export default function ChargingDialog({
               <Typography variant="caption" sx={{ color: UI.text3 }}>
                 {chargingStatus === "done"
                   ? "Charging complete."
-                  : `Estimated time remaining: ${remainingMinutes} min`}
+                  : `Estimated time remaining: ${
+                      effectiveRemainingMinutes || ""
+                    } ${effectiveRemainingMinutes > 0 ? "min" : ""} `}
               </Typography>
             </Stack>
           </Box>
@@ -111,7 +126,11 @@ export default function ChargingDialog({
                 backgroundColor: "rgba(10,10,16,0.02)",
               }}
             >
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+              >
                 <Typography variant="caption" sx={{ color: UI.text3 }}>
                   Ticket ID
                 </Typography>

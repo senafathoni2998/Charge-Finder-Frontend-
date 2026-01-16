@@ -30,4 +30,4 @@ export const REPORT_ISSUE_TYPES = [
 
 // Default ticket size and estimated session length.
 export const TICKET_KWH = 20;
-export const TOTAL_CHARGE_MINUTES = 18;
+export const TOTAL_CHARGE_MINUTES = 0;

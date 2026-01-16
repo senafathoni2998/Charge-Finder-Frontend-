@@ -67,6 +67,22 @@ const toProgressPercent = (value: unknown): number | null => {
   return Math.min(100, Math.max(0, Math.round(num)));
 };
 
+const toDateMs = (value: unknown): number | null => {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return value > 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+};
+
 // Builds the WebSocket URL for charging progress updates.
 const buildChargingSocketUrl = (stationId: string): string | null => {
   const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
@@ -185,6 +201,9 @@ export default function StationDetailPage() {
   const [chargingRequestError, setChargingRequestError] = useState<
     string | null
   >(null);
+  const [estimatedCompletionAt, setEstimatedCompletionAt] = useState<
+    number | null
+  >(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const chargingCompleteRequested = useRef(false);
 
@@ -246,6 +265,12 @@ export default function StationDetailPage() {
     0,
     Math.ceil(((100 - chargingProgress) / 100) * TOTAL_CHARGE_MINUTES)
   );
+  const estimatedRemainingMinutes = useMemo(() => {
+    if (!estimatedCompletionAt) return null;
+    const diffMs = estimatedCompletionAt - Date.now();
+    if (!Number.isFinite(diffMs)) return null;
+    return Math.max(0, Math.ceil(diffMs / 60000));
+  }, [chargingProgress, chargingStatus, estimatedCompletionAt]);
   const deliveredKwh = Math.round((TICKET_KWH * chargingProgress) / 100);
 
   const distanceKm = useMemo(() => {
@@ -437,6 +462,7 @@ export default function StationDetailPage() {
     }
 
     chargingCompleteRequested.current = false;
+    setEstimatedCompletionAt(null);
     setChargingOpen(true);
     setChargingRequestLoading(false);
   };
@@ -492,6 +518,7 @@ export default function StationDetailPage() {
     setChargingStatus("done");
     setChargingProgress(100);
     setTicket(null);
+    setEstimatedCompletionAt(null);
     setChargingRequestLoading(false);
   };
 
@@ -506,6 +533,7 @@ export default function StationDetailPage() {
     setChargingStatus("idle");
     setChargingRequestError(null);
     setChargingRequestLoading(false);
+    setEstimatedCompletionAt(null);
     chargingCompleteRequested.current = false;
   }, [isAuthenticated]);
 
@@ -532,11 +560,20 @@ export default function StationDetailPage() {
         toProgressPercent(ticketPayload?.progressPercent) ??
         toProgressPercent(completedTicketPayload?.progressPercent) ??
         null;
+      const estimatedCompletionMs =
+        toDateMs(payload.estimatedCompletionAt) ??
+        toDateMs(payload.estimateeedCompletionAt) ??
+        toDateMs(payload.estimated_completion_at) ??
+        toDateMs(ticketPayload?.estimatedCompletionAt) ??
+        toDateMs(ticketPayload?.estimateeedCompletionAt) ??
+        toDateMs(ticketPayload?.estimated_completion_at) ??
+        null;
 
       if (type === "completed") {
         setChargingStatus("done");
         setChargingProgress(progressFromPayload ?? 100);
         setTicket(null);
+        setEstimatedCompletionAt(null);
         chargingCompleteRequested.current = true;
         return;
       }
@@ -545,6 +582,7 @@ export default function StationDetailPage() {
         setTicket(null);
         setChargingStatus("idle");
         setChargingProgress(0);
+        setEstimatedCompletionAt(null);
         chargingCompleteRequested.current = false;
         return;
       }
@@ -574,6 +612,10 @@ export default function StationDetailPage() {
             });
           }
         }
+      }
+
+      if (estimatedCompletionMs != null) {
+        setEstimatedCompletionAt(estimatedCompletionMs);
       }
 
       if (type === "started") {
@@ -761,6 +803,7 @@ export default function StationDetailPage() {
         ticketKwh={TICKET_KWH}
         deliveredKwh={deliveredKwh}
         remainingMinutes={remainingMinutes}
+        estimatedRemainingMinutes={estimatedRemainingMinutes}
       />
 
       <ReportDialog
