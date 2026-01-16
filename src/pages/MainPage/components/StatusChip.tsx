@@ -1,8 +1,15 @@
 import { Chip } from "@mui/material";
 import { UI } from "../../../theme/theme";
 
-export default function StatusChip({ status }) {
+export default function StatusChip({ status, isChargingHere }) {
   const map = {
+    CHARGING: {
+      label: "Charging",
+      sx: {
+        borderColor: "rgba(0, 200, 83, 0.55)",
+        backgroundColor: "rgba(0, 200, 83, 0.14)",
+      },
+    },
     AVAILABLE: {
       label: "Available",
       sx: {
@@ -26,16 +33,19 @@ export default function StatusChip({ status }) {
     },
   };
 
+  const key = isChargingHere ? "CHARGING" : status;
+  const config = map[key] ?? map.OFFLINE;
+
   return (
     <Chip
       size="small"
       variant="outlined"
-      label={map[status].label}
+      label={config.label}
       sx={{
         borderRadius: 999,
         color: UI.text,
         fontWeight: 700,
-        ...map[status].sx,
+        ...config.sx,
       }}
     />
   );

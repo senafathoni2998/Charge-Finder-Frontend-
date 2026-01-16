@@ -43,7 +43,7 @@ const StationCard = ({ s, selectedId, focusStation }) => (
                 {s.address}
               </Typography>
             </Box>
-            <StatusChip status={s.status} />
+            <StatusChip status={s.status} isChargingHere={s.isChargingHere} />
           </Stack>
 
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

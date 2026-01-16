@@ -345,13 +345,13 @@ export default function StationDetailPage() {
 
       const normalizedTicket = buildTicketFromServer(payload, ticketPriceLabel);
       setTicket(normalizedTicket);
-      if (normalizedTicket.progressPercent != null) {
-        setChargingProgress(normalizedTicket.progressPercent);
-      }
-      if (normalizedTicket.chargingStatus) {
-        setChargingStatus(normalizedTicket.chargingStatus);
-      }
-    };
+    if (normalizedTicket.progressPercent != null) {
+      setChargingProgress(normalizedTicket.progressPercent);
+    }
+    if (normalizedTicket.chargingStatus) {
+      setChargingStatus(normalizedTicket.chargingStatus);
+    }
+  };
 
     loadActiveTicket();
     return () => {

@@ -10,7 +10,7 @@ import {
 import type { LatLngBoundsExpression } from "leaflet";
 import LegendRow from "./LegendRow";
 import { UI } from "../../theme/theme";
-import { statusColor } from "../../utils/map";
+import { CHARGING_COLOR, statusColor } from "../../utils/map";
 import "leaflet/dist/leaflet.css";
 
 function FitBounds({ bounds }) {
@@ -117,6 +117,11 @@ export default function MapCanvas({
           transformOrigin: "center",
           animation: "cf-user-pulse 2s ease-out infinite",
         },
+        "& .cf-charging-halo": {
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          animation: "cf-charging-pulse 1.4s ease-out infinite",
+        },
         "@keyframes cf-pulse": {
           "0%": { transform: "scale(1)", opacity: 0.7 },
           "70%": { transform: "scale(1.25)", opacity: 0.2 },
@@ -126,6 +131,11 @@ export default function MapCanvas({
           "0%": { transform: "scale(1)", opacity: 0.6 },
           "70%": { transform: "scale(1.35)", opacity: 0.18 },
           "100%": { transform: "scale(1.45)", opacity: 0 },
+        },
+        "@keyframes cf-charging-pulse": {
+          "0%": { transform: "scale(1)", opacity: 0.7 },
+          "70%": { transform: "scale(1.4)", opacity: 0.2 },
+          "100%": { transform: "scale(1.55)", opacity: 0 },
         },
       }}
     >
@@ -139,9 +149,24 @@ export default function MapCanvas({
 
         {stations.map((s) => {
           const isActive = selectedId === s.id;
-          const color = statusColor(s.status);
+          const isCharging = Boolean(s.isChargingHere);
+          const color = statusColor(s.status, isCharging);
           return (
             <Fragment key={s.id}>
+              {isCharging ? (
+                <CircleMarker
+                  center={[s.lat, s.lng]}
+                  radius={isActive ? 22 : 18}
+                  interactive={false}
+                  pathOptions={{
+                    color: CHARGING_COLOR,
+                    fillColor: CHARGING_COLOR,
+                    fillOpacity: 0.18,
+                    weight: 2,
+                    className: "cf-charging-halo",
+                  }}
+                />
+              ) : null}
               <CircleMarker
                 center={[s.lat, s.lng]}
                 radius={isActive ? 18 : 14}
@@ -169,7 +194,8 @@ export default function MapCanvas({
                 }}
               >
                 <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
-                  {s.name} • {s.status}
+                  {s.name} •{" "}
+                  {isCharging ? `Charging • ${s.status}` : s.status}
                 </Tooltip>
               </CircleMarker>
             </Fragment>
@@ -231,6 +257,7 @@ export default function MapCanvas({
           <LegendRow label="Available" color="rgba(0,229,255,0.95)" />
           <LegendRow label="Busy" color="rgba(255,193,7,0.95)" />
           <LegendRow label="Offline" color="rgba(244,67,54,0.95)" />
+          <LegendRow label="Charging" color={CHARGING_COLOR} />
           <LegendRow label="You" color="rgba(124,92,255,0.98)" />
         </Stack>
       </Box>

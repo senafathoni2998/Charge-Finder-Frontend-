@@ -134,7 +134,10 @@ export default function ActionsCard({
                       width: 10,
                       height: 10,
                       borderRadius: 999,
-                      backgroundColor: statusColor(station.status as Availability),
+                    backgroundColor: statusColor(
+                      station.status as Availability,
+                      station.isChargingHere
+                    ),
                       boxShadow: "0 8px 18px rgba(10,10,16,0.14)",
                       border: "1px solid rgba(255,255,255,0.95)",
                     }}

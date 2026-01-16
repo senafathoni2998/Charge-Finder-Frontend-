@@ -63,7 +63,10 @@ export default function SelectedStationCard({
                 {station.address}
               </Typography>
             </Box>
-            <StatusChip status={station.status} />
+            <StatusChip
+              status={station.status}
+              isChargingHere={station.isChargingHere}
+            />
           </Stack>
 
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

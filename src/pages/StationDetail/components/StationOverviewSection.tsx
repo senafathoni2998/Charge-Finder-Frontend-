@@ -40,7 +40,10 @@ export default function StationOverviewSection({
           <Skeleton variant="rounded" width={90} height={28} />
         ) : station ? (
           <Stack direction="row" spacing={1} alignItems="center">
-            <StatusChip status={station.status as Availability} />
+            <StatusChip
+              status={station.status as Availability}
+              isChargingHere={station.isChargingHere}
+            />
             {activeCar && activeCar.connectorTypes.length ? (
               <Chip
                 size="small"

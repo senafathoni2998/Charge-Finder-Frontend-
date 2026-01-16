@@ -33,4 +33,5 @@ export type Station = {
   pricing: StationPricing;
   amenities: string[];
   notes?: string;
+  isChargingHere?: boolean;
 };

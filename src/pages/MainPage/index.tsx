@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 // NOTE: This page uses react-router for navigation in the full app.
 import { Box, Drawer, useMediaQuery } from "@mui/material";
 import { useLocation, useNavigate } from "react-router";
-import { fetchStations } from "../../api/stations";
+import { fetchStationById, fetchStations } from "../../api/stations";
 import { UI } from "../../theme/theme";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setMdMode, setSidebarOpen } from "../../features/app/appSlice";
@@ -16,6 +16,8 @@ import { buildMapsUrl } from "./utils";
 import { DRAWER_WIDTH } from "./constants";
 import FiltersPanel from "./components/FiltersPanel";
 import MapPanel from "./components/MapPanel";
+
+const CHARGING_STATION_REFRESH_MS = 60000;
 
 export default function MainPage() {
   // Filters are local state (canvas-safe). In your real app, sync them to URL query.
@@ -121,6 +123,48 @@ export default function MainPage() {
     () => boundsFromStations(filtered.length ? filtered : stations),
     [filtered, stations]
   );
+  const activeChargingStationId = useMemo(
+    () => stations.find((station) => station.isChargingHere)?.id ?? null,
+    [stations]
+  );
+
+  useEffect(() => {
+    if (!activeChargingStationId) return;
+    let active = true;
+    let controller: AbortController | null = null;
+    let isLoading = false;
+
+    const refreshChargingStation = async () => {
+      if (isLoading) return;
+      isLoading = true;
+      const nextController = new AbortController();
+      controller = nextController;
+      const result = await fetchStationById(
+        activeChargingStationId,
+        nextController.signal
+      );
+      if (!active) return;
+      if (result.ok && result.station) {
+        setStations((prev) =>
+          prev.map((station) =>
+            station.id === result.station?.id ? result.station : station
+          )
+        );
+      }
+      isLoading = false;
+    };
+
+    refreshChargingStation();
+    const intervalId = window.setInterval(
+      refreshChargingStation,
+      CHARGING_STATION_REFRESH_MS
+    );
+    return () => {
+      active = false;
+      controller?.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [activeChargingStationId]);
 
   const handleFocusStation = (station: StationWithDistance) => {
     setSelectedId(station.id);
