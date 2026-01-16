@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { UI } from "../../theme/theme";
-import { fetchStations } from "../../api/stations";
+import { fetchStationById, fetchStations } from "../../api/stations";
 import {
   completeChargingSession,
   startChargingSession,
@@ -34,6 +34,7 @@ import {
 } from "./constants";
 import { buildMapsUrl, getSharePayload, getTicketPriceLabel } from "./utils";
 import type { ChargingStatus, Station, Ticket } from "./types";
+import type { ConnectorType } from "../../models/model";
 import StationOverviewSection from "./components/StationOverviewSection";
 import ConnectorsSection from "./components/ConnectorsSection";
 import AmenitiesSection from "./components/AmenitiesSection";
@@ -45,6 +46,7 @@ import ChargingDialog from "./components/ChargingDialog";
 import ReportDialog from "./components/ReportDialog";
 import ShareDialog from "./components/ShareDialog";
 import { checkSessionStatus } from "../../utils/session";
+import StartChargingDialog from "./components/StartChargingDialog";
 
 const toCleanString = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
@@ -201,6 +203,13 @@ export default function StationDetailPage() {
   const [chargingRequestError, setChargingRequestError] = useState<
     string | null
   >(null);
+  const [startChargingOpen, setStartChargingOpen] = useState(false);
+  const [selectedConnectorType, setSelectedConnectorType] = useState<
+    ConnectorType | null
+  >(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
+    activeCarId ?? null
+  );
   const [estimatedCompletionAt, setEstimatedCompletionAt] = useState<
     number | null
   >(null);
@@ -298,6 +307,40 @@ export default function StationDetailPage() {
     }
     return stationConnectorTypes[0];
   }, [station, activeCar]);
+  const availableConnectorTypes = useMemo(() => {
+    if (!station) return [];
+    const types = station.connectors.map((connector) => connector.type);
+    return Array.from(new Set(types));
+  }, [station]);
+
+  useEffect(() => {
+    if (!availableConnectorTypes.length) {
+      setSelectedConnectorType(null);
+      return;
+    }
+    if (
+      selectedConnectorType &&
+      availableConnectorTypes.includes(selectedConnectorType)
+    ) {
+      return;
+    }
+    setSelectedConnectorType(
+      preferredConnectorType ?? availableConnectorTypes[0]
+    );
+  }, [availableConnectorTypes, preferredConnectorType, selectedConnectorType]);
+
+  useEffect(() => {
+    if (!startChargingOpen) return;
+    if (activeCarId && cars.some((car) => car.id === activeCarId)) {
+      setSelectedVehicleId(activeCarId);
+      return;
+    }
+    if (!cars.length) {
+      setSelectedVehicleId(null);
+      return;
+    }
+    setSelectedVehicleId(cars[0].id);
+  }, [activeCarId, cars, startChargingOpen]);
 
   const isCompatible = useMemo(() => {
     if (!activeCar || !station || !activeCar.connectorTypes.length) return null;
@@ -385,6 +428,14 @@ export default function StationDetailPage() {
     return false;
   }, [invalidateSession, isAuthenticated]);
 
+  const refreshStation = useCallback(async () => {
+    if (!stationId) return;
+    const result = await fetchStationById(stationId);
+    if (result.ok && result.station) {
+      setStation(result.station);
+    }
+  }, [stationId]);
+
   // Creates a charging ticket for the selected payment method.
   const handleBuyTicket = async () => {
     if (!ensureSessionValid() || !station || !isAuthenticated) return;
@@ -427,13 +478,20 @@ export default function StationDetailPage() {
   };
 
   // Starts charging by calling the backend endpoint.
-  const handleStartCharging = async () => {
+  const handleStartCharging = async (
+    connectorType?: ConnectorType | null,
+    vehicleId?: string | null
+  ) => {
     if (!ensureSessionValid()) return;
     if (!canStartCharging || !station || chargingRequestLoading) return;
     setChargingRequestLoading(true);
     setChargingRequestError(null);
 
-    const result = await startChargingSession({ stationId: station.id });
+    const result = await startChargingSession({
+      stationId: station.id,
+      connectorType: connectorType ?? undefined,
+      vehicleId: vehicleId ?? undefined,
+    });
     if (!result.ok) {
       setChargingRequestError(result.error || "Could not start charging.");
       setChargingRequestLoading(false);
@@ -462,6 +520,7 @@ export default function StationDetailPage() {
     }
 
     chargingCompleteRequested.current = false;
+    await refreshStation();
     setEstimatedCompletionAt(null);
     setChargingOpen(true);
     setChargingRequestLoading(false);
@@ -472,7 +531,19 @@ export default function StationDetailPage() {
       setChargingOpen(true);
       return;
     }
-    handleStartCharging();
+    if (!ensureSessionValid()) return;
+    if (!availableConnectorTypes.length) {
+      setChargingRequestError("No connectors available for this station.");
+      return;
+    }
+    setChargingRequestError(null);
+    setStartChargingOpen(true);
+  };
+
+  const handleConfirmStartCharging = async () => {
+    if (!selectedConnectorType) return;
+    setStartChargingOpen(false);
+    await handleStartCharging(selectedConnectorType, selectedVehicleId);
   };
 
   // Opens the payment dialog or redirects to login if needed.
@@ -519,6 +590,7 @@ export default function StationDetailPage() {
     setChargingProgress(100);
     setTicket(null);
     setEstimatedCompletionAt(null);
+    await refreshStation();
     setChargingRequestLoading(false);
   };
 
@@ -804,6 +876,19 @@ export default function StationDetailPage() {
         deliveredKwh={deliveredKwh}
         remainingMinutes={remainingMinutes}
         estimatedRemainingMinutes={estimatedRemainingMinutes}
+      />
+
+      <StartChargingDialog
+        open={startChargingOpen}
+        onClose={() => setStartChargingOpen(false)}
+        connectorTypes={availableConnectorTypes}
+        selectedConnectorType={selectedConnectorType}
+        onConnectorChange={setSelectedConnectorType}
+        vehicles={cars}
+        selectedVehicleId={selectedVehicleId}
+        onVehicleChange={setSelectedVehicleId}
+        onConfirm={handleConfirmStartCharging}
+        isSubmitting={chargingRequestLoading}
       />
 
       <ReportDialog

@@ -78,6 +78,9 @@ export default function CarsCard({
             <Stack spacing={1.5}>
               {cars.map((car) => {
                 const isActive = car.id === activeCarId;
+                const isCharging =
+                  typeof car.chargingStatus === "string" &&
+                  car.chargingStatus.trim().toUpperCase() === "CHARGING";
                 console.log("Rendering car:", car, "isActive:", isActive);
                 return (
                   <Box
@@ -114,6 +117,19 @@ export default function CarsCard({
                               borderRadius: 999,
                               backgroundColor: "rgba(0,229,255,0.12)",
                               border: "1px solid rgba(0,229,255,0.3)",
+                              color: UI.text,
+                              fontWeight: 800,
+                            }}
+                          />
+                        ) : null}
+                        {isCharging ? (
+                          <Chip
+                            size="small"
+                            label="Charging"
+                            sx={{
+                              borderRadius: 999,
+                              backgroundColor: "rgba(0,200,83,0.12)",
+                              border: "1px solid rgba(0,200,83,0.35)",
                               color: UI.text,
                               fontWeight: 800,
                             }}

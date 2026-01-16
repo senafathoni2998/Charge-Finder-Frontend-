@@ -19,6 +19,7 @@ export type UserCar = {
   name: string;
   connectorTypes: ConnectorType[];
   minKW: number;
+  chargingStatus?: string | null;
 };
 
 const VALID_CONNECTORS = new Set<ConnectorType>(["CCS2", "Type2", "CHAdeMO"]);
@@ -44,7 +45,11 @@ const sanitizeCar = (data: unknown): UserCar | null => {
       )
     : [];
   const minKW = Number.isFinite(raw.minKW) ? Number(raw.minKW) : 0;
-  return { id, name, connectorTypes, minKW };
+  const chargingStatus =
+    typeof raw.chargingStatus === "string" && raw.chargingStatus.trim()
+      ? raw.chargingStatus.trim()
+      : null;
+  return { id, name, connectorTypes, minKW, chargingStatus };
 };
 
 const parseCars = (raw: string | null): UserCar[] => {
@@ -74,7 +79,7 @@ const parseLegacyCar = (raw: string | null): UserCar | null => {
       : [];
     const minKW = Number.isFinite(data.minKW) ? Number(data.minKW) : 0;
     const id = `car-${Date.now()}`;
-    return { id, name, connectorTypes, minKW };
+    return { id, name, connectorTypes, minKW, chargingStatus: null };
   } catch {
     return null;
   }

@@ -1,5 +1,9 @@
+import type { ConnectorType } from "../models/model";
+
 type ChargingRequestParams = {
   stationId: string;
+  connectorType?: ConnectorType | null;
+  vehicleId?: string | null;
   signal?: AbortSignal;
 };
 
@@ -24,6 +28,8 @@ type ChargingProgressResult = {
 // Starts a charging session for the user's active ticket.
 export const startChargingSession = async ({
   stationId,
+  connectorType,
+  vehicleId,
   signal,
 }: ChargingRequestParams): Promise<ChargingRequestResult> => {
   const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
@@ -36,9 +42,12 @@ export const startChargingSession = async ({
   }
 
   try {
+    const payload: Record<string, unknown> = { stationId };
+    if (connectorType) payload.connectorType = connectorType;
+    if (vehicleId) payload.vehicleId = vehicleId;
     const response = await fetch(`${baseUrl}/stations/start-charging`, {
       method: "POST",
-      body: JSON.stringify({ stationId }),
+      body: JSON.stringify(payload),
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       signal,

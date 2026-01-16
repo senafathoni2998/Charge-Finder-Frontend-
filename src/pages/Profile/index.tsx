@@ -129,18 +129,28 @@ export default function ProfilePage() {
 
     if (!Array.isArray(vehicles)) return;
     const remappedVehicles = vehicles
-      .map((v: any) => ({
-        id:
-          typeof v.id === "string"
-            ? v.id.trim()
-            : typeof v.id === "number"
-            ? String(v.id)
-            : "",
-        name:
-          typeof v.name === "string" && v.name.trim() ? v.name.trim() : "My EV",
-        connectorTypes: Array.isArray(v.connector_type) ? v.connector_type : [],
-        minKW: Number.isFinite(Number(v.min_power)) ? Number(v.min_power) : 0,
-      }))
+      .map((v: any) => {
+        const chargingStatus =
+          typeof v.chargingStatus === "string" && v.chargingStatus.trim()
+            ? v.chargingStatus.trim()
+            : typeof v.charging_status === "string" &&
+              v.charging_status.trim()
+            ? v.charging_status.trim()
+            : null;
+        return {
+          id:
+            typeof v.id === "string"
+              ? v.id.trim()
+              : typeof v.id === "number"
+              ? String(v.id)
+              : "",
+          name:
+            typeof v.name === "string" && v.name.trim() ? v.name.trim() : "My EV",
+          connectorTypes: Array.isArray(v.connector_type) ? v.connector_type : [],
+          minKW: Number.isFinite(Number(v.min_power)) ? Number(v.min_power) : 0,
+          chargingStatus,
+        };
+      })
       .filter((car) => car.id);
     const nextActiveId =
       storedActiveId &&
