@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
+  Snackbar,
   Stack,
   Typography,
   useMediaQuery,
@@ -21,7 +23,9 @@ import {
 } from "../../api/tickets";
 import { useGeoLocation } from "../../hooks/geolocation-hook";
 import { haversineKm } from "../../utils/distance";
-import { useAppSelector } from "../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { logout } from "../../features/auth/authSlice";
+import { clearAuthStorage } from "../Profile/profileStorage";
 import {
   PAYMENT_METHODS,
   REPORT_ISSUE_TYPES,
@@ -40,6 +44,7 @@ import PaymentDialog from "./components/PaymentDialog";
 import ChargingDialog from "./components/ChargingDialog";
 import ReportDialog from "./components/ReportDialog";
 import ShareDialog from "./components/ShareDialog";
+import { checkSessionStatus } from "../../utils/session";
 
 const toCleanString = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
@@ -153,6 +158,7 @@ export default function StationDetailPage() {
   const { id: stationId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const cars = useAppSelector((state) => state.auth.cars);
   const activeCarId = useAppSelector((state) => state.auth.activeCarId);
@@ -179,6 +185,7 @@ export default function StationDetailPage() {
   const [chargingRequestError, setChargingRequestError] = useState<
     string | null
   >(null);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const chargingCompleteRequested = useRef(false);
 
   const geo = useGeoLocation();
@@ -336,9 +343,26 @@ export default function StationDetailPage() {
     navigate(`/login?next=${next}`);
   };
 
+  const invalidateSession = useCallback(
+    (message: string | null) => {
+      if (message) setSessionMessage(message);
+      clearAuthStorage({ setLogoutRedirect: false });
+      dispatch(logout());
+    },
+    [dispatch]
+  );
+
+  const ensureSessionValid = useCallback(() => {
+    if (!isAuthenticated) return true;
+    const result = checkSessionStatus();
+    if (result.status === "valid") return true;
+    invalidateSession(result.message);
+    return false;
+  }, [invalidateSession, isAuthenticated]);
+
   // Creates a charging ticket for the selected payment method.
   const handleBuyTicket = async () => {
-    if (!station || !isAuthenticated) return;
+    if (!ensureSessionValid() || !station || !isAuthenticated) return;
     setTicketRequestError(null);
     setTicketRequestLoading(true);
 
@@ -379,6 +403,7 @@ export default function StationDetailPage() {
 
   // Starts charging by calling the backend endpoint.
   const handleStartCharging = async () => {
+    if (!ensureSessionValid()) return;
     if (!canStartCharging || !station || chargingRequestLoading) return;
     setChargingRequestLoading(true);
     setChargingRequestError(null);
@@ -426,6 +451,7 @@ export default function StationDetailPage() {
 
   // Opens the payment dialog or redirects to login if needed.
   const handlePaymentOpen = () => {
+    if (!ensureSessionValid()) return;
     if (!isAuthenticated) {
       handleLoginRedirect();
       return;
@@ -449,6 +475,7 @@ export default function StationDetailPage() {
 
   // Stops charging by completing the active session.
   const handleStopCharging = async () => {
+    if (!ensureSessionValid()) return;
     if (!station || chargingRequestLoading) return;
     setChargingRequestLoading(true);
     setChargingRequestError(null);
@@ -752,6 +779,22 @@ export default function StationDetailPage() {
         onClose={() => setShareOpen(false)}
         station={station}
       />
+
+      <Snackbar
+        open={!!sessionMessage}
+        autoHideDuration={4000}
+        onClose={() => setSessionMessage(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSessionMessage(null)}
+          severity="warning"
+          variant="filled"
+          sx={{ borderRadius: 3 }}
+        >
+          {sessionMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

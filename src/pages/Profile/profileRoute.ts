@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 import store from "../../app/store";
 import { logout } from "../../features/auth/authSlice";
+import { persistSessionMessage } from "../../utils/session";
 import { passwordIssue } from "../../utils/validate";
 import type { ProfileLoaderData } from "./types";
 import {
@@ -10,18 +11,32 @@ import {
   readStoredUserId,
 } from "./profileStorage";
 
-// Fetches JSON safely for loader routes, returning null on errors.
-const fetchProfileJson = async (url: string, signal?: AbortSignal) => {
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    signal,
-  });
-  if (!response.ok) return null;
+type ProfileFetchResult = {
+  ok: boolean;
+  status: number;
+  data: unknown | null;
+};
+
+// Fetches JSON safely for loader routes, returning status details on errors.
+const fetchProfileJson = async (
+  url: string,
+  signal?: AbortSignal
+): Promise<ProfileFetchResult> => {
   try {
-    return await response.json();
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      signal,
+    });
+    const status = response.status;
+    if (!response.ok) return { ok: false, status, data: null };
+    try {
+      return { ok: true, status, data: await response.json() };
+    } catch {
+      return { ok: false, status, data: null };
+    }
   } catch {
-    return null;
+    return { ok: false, status: 0, data: null };
   }
 };
 
@@ -42,10 +57,23 @@ export async function profileLoader({ request }: { request: Request }) {
     return { user: null, vehicles: null, activeCarId };
   }
 
-  const [profileData, vehiclesData] = await Promise.all([
-    fetchProfileJson(`${baseUrl}/profile`, request.signal).catch(() => null),
-    fetchProfileJson(`${baseUrl}/vehicles`, request.signal).catch(() => null),
+  const [profileResult, vehiclesResult] = await Promise.all([
+    fetchProfileJson(`${baseUrl}/profile`, request.signal),
+    fetchProfileJson(`${baseUrl}/vehicles`, request.signal),
   ]);
+
+  const unauthorized = [profileResult.status, vehiclesResult.status].some(
+    (status) => status === 401 || status === 403
+  );
+  if (unauthorized) {
+    persistSessionMessage("Your session has expired. Please log in again.");
+    clearAuthStorage({ setLogoutRedirect: false });
+    store.dispatch(logout());
+    return { user: null, vehicles: null, activeCarId };
+  }
+
+  const profileData = profileResult.ok ? profileResult.data : null;
+  const vehiclesData = vehiclesResult.ok ? vehiclesResult.data : null;
 
   const user =
     profileData && typeof profileData === "object"

@@ -81,7 +81,9 @@ export const persistCarsToStorage = (
 };
 
 // Clears auth-related storage on logout and flags a redirect hint.
-export const clearAuthStorage = () => {
+export const clearAuthStorage = (
+  options: { setLogoutRedirect?: boolean } = {}
+) => {
   if (typeof window === "undefined") return;
   try {
     const storage = window.localStorage;
@@ -93,7 +95,9 @@ export const clearAuthStorage = () => {
     storage.removeItem(LOCAL_KEYS.userCar);
     storage.removeItem(LOCAL_KEYS.userCars);
     storage.removeItem(LOCAL_KEYS.activeCarId);
-    window.sessionStorage.setItem(SESSION_KEYS.logoutRedirect, "1");
+    if (options.setLogoutRedirect !== false) {
+      window.sessionStorage.setItem(SESSION_KEYS.logoutRedirect, "1");
+    }
   } catch {
     // ignore
   }

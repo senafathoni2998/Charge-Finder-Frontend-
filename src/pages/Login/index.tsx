@@ -11,6 +11,7 @@ import { UI } from "../../theme/theme";
 import type { LoginActionData } from "./types";
 import { getRememberedLoginEmail } from "./loginStorage";
 import { safeNextPath } from "./loginUtils";
+import { consumeSessionMessage } from "../../utils/session";
 import LoginAppBar from "./components/LoginAppBar";
 import LoginBackground from "./components/LoginBackground";
 import LoginFormCard from "./components/LoginFormCard";
@@ -24,10 +25,12 @@ export default function ChargeFinderLoginPage() {
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => getRememberedLoginEmail() ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(() =>
+    consumeSessionMessage()
+  );
 
   const pwIssue = useMemo(() => passwordIssue(password), [password]);
   const nextPath = useMemo(
@@ -35,11 +38,6 @@ export default function ChargeFinderLoginPage() {
     [searchParams]
   );
   const isSubmitting = navigation.state === "submitting";
-
-  useEffect(() => {
-    const saved = getRememberedLoginEmail();
-    if (saved) setEmail(saved);
-  }, []);
 
   useEffect(() => {
     if (actionData?.error) setError(actionData.error);

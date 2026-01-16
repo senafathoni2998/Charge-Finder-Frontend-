@@ -25,9 +25,36 @@ export function haversineKm(a, b) {
   return R * c;
 }
 
+const DEFAULT_MAP_CENTER = { lat: -6.2, lng: 106.8167 };
+const DEFAULT_LAT_SPAN = 0.35;
+const DEFAULT_LNG_SPAN = 0.45;
+
 export function boundsFromStations(stations) {
-  const lats = stations.map((s) => s.lat);
-  const lngs = stations.map((s) => s.lng);
+  const coords = stations
+    .map((s) => ({ lat: Number(s.lat), lng: Number(s.lng) }))
+    .filter(
+      (point) =>
+        Number.isFinite(point.lat) &&
+        Number.isFinite(point.lng)
+    );
+
+  if (!coords.length) {
+    const minLat = DEFAULT_MAP_CENTER.lat - DEFAULT_LAT_SPAN / 2;
+    const maxLat = DEFAULT_MAP_CENTER.lat + DEFAULT_LAT_SPAN / 2;
+    const minLng = DEFAULT_MAP_CENTER.lng - DEFAULT_LNG_SPAN / 2;
+    const maxLng = DEFAULT_MAP_CENTER.lng + DEFAULT_LNG_SPAN / 2;
+    return {
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      latSpan: DEFAULT_LAT_SPAN,
+      lngSpan: DEFAULT_LNG_SPAN,
+    };
+  }
+
+  const lats = coords.map((s) => s.lat);
+  const lngs = coords.map((s) => s.lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
