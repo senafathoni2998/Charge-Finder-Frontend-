@@ -63,13 +63,6 @@ export default function ChargeFinderLoginPage() {
     setToast("Forgot password (demo). Wire to reset flow.");
   };
 
-  const handleGoogleLogin = () => {
-    setToast("Google sign-in (demo).");
-  };
-
-  const handleAppleLogin = () => {
-    setToast("Apple sign-in (demo).");
-  };
 
   const handleNavigateToSignup = () => {
     navigate(`/signup?next=${encodeURIComponent(nextPath)}`);
@@ -117,8 +110,6 @@ export default function ChargeFinderLoginPage() {
             pwIssue={pwIssue}
             isSubmitting={isSubmitting}
             onForgotPassword={handleForgotPassword}
-            onGoogleLogin={handleGoogleLogin}
-            onAppleLogin={handleAppleLogin}
             onNavigateToSignup={handleNavigateToSignup}
           />
         </Box>

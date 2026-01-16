@@ -1,15 +1,23 @@
+import { useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  IconButton,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   Stack,
   Typography,
 } from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { UI } from "../../../theme/theme";
 import type { UserCar } from "../../../features/auth/authSlice";
-import { minutesAgo } from "../../../utils/time";
 
 type CarsCardProps = {
   cars: UserCar[];
@@ -30,6 +38,26 @@ export default function CarsCard({
   onEdit,
 }: CarsCardProps) {
   const hasCars = cars.length > 0;
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuCarId, setMenuCarId] = useState<string | null>(null);
+  const menuOpen = Boolean(menuAnchor);
+  const menuCar = cars.find((car) => car.id === menuCarId) ?? null;
+  const isMenuCarActive = menuCar ? menuCar.id === activeCarId : false;
+
+  const handleOpenMenu = (event: MouseEvent<HTMLElement>, carId: string) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuCarId(carId);
+  };
+
+  const handleCloseMenu = () => {
+    setMenuAnchor(null);
+    setMenuCarId(null);
+  };
+
+  const handleMenuAction = (action: () => void) => {
+    action();
+    handleCloseMenu();
+  };
 
   return (
     <Card
@@ -83,12 +111,6 @@ export default function CarsCard({
                   typeof car.chargingStatus === "string" &&
                   car.chargingStatus.trim().toUpperCase() === "CHARGING";
                 const hasBatteryPercent = Number.isFinite(car.batteryPercent);
-                const hasBatteryStatus =
-                  typeof car.batteryStatus === "string" &&
-                  car.batteryStatus.trim().length > 0;
-                const hasBatteryUpdatedAt =
-                  typeof car.lastBatteryUpdatedAt === "string" &&
-                  car.lastBatteryUpdatedAt.trim().length > 0;
                 console.log("Rendering car:", car, "isActive:", isActive);
                 return (
                   <Box
@@ -144,44 +166,31 @@ export default function CarsCard({
                           />
                         ) : null}
                         <Box sx={{ flex: 1 }} />
-                        {!isActive ? (
-                          <Button
+                        {hasBatteryPercent ? (
+                          <Chip
                             size="small"
-                            variant="outlined"
-                            onClick={() => onSetActive(car.id)}
+                            label={`Battery ${car.batteryPercent}%`}
                             sx={{
-                              textTransform: "none",
-                              borderRadius: 3,
-                              borderColor: UI.border,
+                              borderRadius: 999,
+                              backgroundColor: "rgba(0,200,83,0.12)",
+                              border: "1px solid rgba(0,200,83,0.35)",
                               color: UI.text,
-                              backgroundColor: "rgba(10,10,16,0.01)",
+                              fontWeight: 700,
                             }}
-                          >
-                            Use this car
-                          </Button>
+                          />
                         ) : null}
-                        <Button
+                        <IconButton
                           size="small"
-                          variant="text"
-                          onClick={() => onEdit(car.id)}
+                          onClick={(event) => handleOpenMenu(event, car.id)}
                           sx={{
-                            textTransform: "none",
+                            borderRadius: 2.5,
+                            border: `1px solid ${UI.border2}`,
                             color: UI.text,
                           }}
+                          aria-label="Car actions"
                         >
-                          Edit
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="text"
-                          onClick={() => onRemove(car.id)}
-                          sx={{
-                            textTransform: "none",
-                            color: "rgba(244,67,54,0.95)",
-                          }}
-                        >
-                          Remove
-                        </Button>
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
                       </Stack>
 
                       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
@@ -205,39 +214,6 @@ export default function CarsCard({
                           </Typography>
                         ) : null}
                       </Stack>
-
-                      {hasBatteryPercent || hasBatteryStatus || hasBatteryUpdatedAt ? (
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          alignItems="center"
-                          sx={{ flexWrap: "wrap" }}
-                        >
-                          {hasBatteryPercent ? (
-                            <Chip
-                              size="small"
-                              label={`Battery ${car.batteryPercent}%`}
-                              sx={{
-                                borderRadius: 999,
-                                backgroundColor: "rgba(0,200,83,0.12)",
-                                border: "1px solid rgba(0,200,83,0.35)",
-                                color: UI.text,
-                                fontWeight: 700,
-                              }}
-                            />
-                          ) : null}
-                          {hasBatteryStatus ? (
-                            <Typography variant="caption" sx={{ color: UI.text2 }}>
-                              {car.batteryStatus}
-                            </Typography>
-                          ) : null}
-                          {hasBatteryUpdatedAt ? (
-                            <Typography variant="caption" sx={{ color: UI.text3 }}>
-                              Updated {minutesAgo(car.lastBatteryUpdatedAt)}m ago
-                            </Typography>
-                          ) : null}
-                        </Stack>
-                      ) : null}
 
                       <Typography variant="caption" sx={{ color: UI.text2 }}>
                         Preferred minimum power: {car.minKW || 0} kW
@@ -266,6 +242,56 @@ export default function CarsCard({
           )}
         </Stack>
       </CardContent>
+
+      <Menu
+        anchorEl={menuAnchor}
+        open={menuOpen}
+        onClose={handleCloseMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: `1px solid ${UI.border}`,
+            boxShadow: "0 16px 40px rgba(10,10,16,0.14)",
+          },
+        }}
+      >
+        <MenuItem
+          disabled={!menuCar || isMenuCarActive}
+          onClick={() =>
+            menuCar ? handleMenuAction(() => onSetActive(menuCar.id)) : handleCloseMenu()
+          }
+        >
+          <ListItemIcon>
+            <CheckCircleOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          Use this car
+        </MenuItem>
+        <MenuItem
+          disabled={!menuCar}
+          onClick={() =>
+            menuCar ? handleMenuAction(() => onEdit(menuCar.id)) : handleCloseMenu()
+          }
+        >
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          Edit
+        </MenuItem>
+        <MenuItem
+          disabled={!menuCar}
+          onClick={() =>
+            menuCar ? handleMenuAction(() => onRemove(menuCar.id)) : handleCloseMenu()
+          }
+          sx={{ color: "rgba(244,67,54,0.95)" }}
+        >
+          <ListItemIcon sx={{ color: "rgba(244,67,54,0.95)" }}>
+            <DeleteOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          Remove
+        </MenuItem>
+      </Menu>
     </Card>
   );
 }

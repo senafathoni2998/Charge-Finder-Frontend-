@@ -19,8 +19,6 @@ import EmailIcon from "@mui/icons-material/Email";
 import LockIcon from "@mui/icons-material/Lock";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import GoogleIcon from "@mui/icons-material/Google";
-import AppleIcon from "@mui/icons-material/Apple";
 import { Form } from "react-router";
 import { UI } from "../../../theme/theme";
 import { isValidEmail } from "../../../utils/validate";
@@ -44,8 +42,6 @@ type LoginFormCardProps = {
   pwIssue: string | null;
   isSubmitting: boolean;
   onForgotPassword: () => void;
-  onGoogleLogin: () => void;
-  onAppleLogin: () => void;
   onNavigateToSignup: () => void;
 };
 
@@ -59,8 +55,6 @@ export default function LoginFormCard({
   pwIssue,
   isSubmitting,
   onForgotPassword,
-  onGoogleLogin,
-  onAppleLogin,
   onNavigateToSignup,
 }: LoginFormCardProps) {
   const [remember, setRemember] = useState(true);
@@ -258,43 +252,6 @@ export default function LoginFormCard({
                   }}
                 >
                   {isSubmitting ? "Signing in\u2026" : "Sign in"}
-                </Button>
-              </Stack>
-
-              <Divider sx={{ borderColor: UI.border2, my: 0.75 }} />
-
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                <Button
-                  type="button"
-                  variant="outlined"
-                  onClick={onGoogleLogin}
-                  startIcon={<GoogleIcon />}
-                  sx={{
-                    textTransform: "none",
-                    borderRadius: 3,
-                    borderColor: UI.border,
-                    color: UI.text,
-                    backgroundColor: "rgba(10,10,16,0.01)",
-                  }}
-                  fullWidth
-                >
-                  Continue with Google
-                </Button>
-                <Button
-                  type="button"
-                  variant="outlined"
-                  onClick={onAppleLogin}
-                  startIcon={<AppleIcon />}
-                  sx={{
-                    textTransform: "none",
-                    borderRadius: 3,
-                    borderColor: UI.border,
-                    color: UI.text,
-                    backgroundColor: "rgba(10,10,16,0.01)",
-                  }}
-                  fullWidth
-                >
-                  Continue with Apple
                 </Button>
               </Stack>
 
