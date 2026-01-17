@@ -14,6 +14,9 @@ export async function signupAction({ request }: { request: Request }) {
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirm") || "");
   const remember = formData.get("remember") === "1";
+  const imageEntry = formData.get("image");
+  const imageFile =
+    imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
 
   if (!isValidEmail(email)) {
     return { error: "Please enter a valid email address." };
@@ -25,6 +28,9 @@ export async function signupAction({ request }: { request: Request }) {
   if (password !== confirmPassword) {
     return { error: "Passwords do not match." };
   }
+  if (imageFile && !imageFile.type.startsWith("image/")) {
+    return { error: "Profile photo must be an image file." };
+  }
 
   const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
   if (!baseUrl) {
@@ -32,17 +38,32 @@ export async function signupAction({ request }: { request: Request }) {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/auth/signup`, {
-      method: "POST",
-      body: JSON.stringify({
-        email,
-        password,
-        name,
-        region,
-      }),
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
+    let response: Response;
+    if (imageFile) {
+      const payload = new FormData();
+      payload.append("email", email);
+      payload.append("password", password);
+      payload.append("name", name);
+      if (region) payload.append("region", region);
+      payload.append("image", imageFile);
+      response = await fetch(`${baseUrl}/auth/signup`, {
+        method: "POST",
+        body: payload,
+        credentials: "include",
+      });
+    } else {
+      response = await fetch(`${baseUrl}/auth/signup`, {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          region,
+        }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+    }
     const responseData = await response.json().catch(() => ({}));
     if (!response.ok) {
       return { error: responseData.message || "Failed to sign up." };

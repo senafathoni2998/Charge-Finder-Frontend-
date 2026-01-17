@@ -126,22 +126,32 @@ export async function profileAction({ request }: { request: Request }) {
   if (intent === "profile") {
     const name = String(formData.get("name") || "").trim();
     const region = String(formData.get("region") || "").trim();
+    const imageEntry = formData.get("image");
+    const imageFile =
+      imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
     if (!name) {
       return { intent: "profile", error: "Name is required." };
     }
     if (!userId) {
       return { intent: "profile", error: "User session is missing." };
     }
+    if (imageFile && !imageFile.type.startsWith("image/")) {
+      return {
+        intent: "profile",
+        error: "Profile photo must be an image file.",
+      };
+    }
 
     try {
+      const payload = new FormData();
+      payload.append("userId", userId);
+      payload.append("name", name);
+      if (region) payload.append("region", region);
+      if (imageFile) payload.append("image", imageFile);
+
       const response = await fetch(`${baseUrl}/profile/update-profile`, {
         method: "PATCH",
-        body: JSON.stringify({
-          userId,
-          name,
-          region,
-        }),
-        headers: { "Content-Type": "application/json" },
+        body: payload,
         credentials: "include",
       });
       const responseData = await response.json().catch(() => ({}));

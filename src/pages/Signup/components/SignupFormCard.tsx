@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
@@ -76,6 +77,45 @@ export default function SignupFormCard({
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const photoPreviewRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewRef.current) {
+        URL.revokeObjectURL(photoPreviewRef.current);
+        photoPreviewRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setPhotoFile(file);
+    if (photoPreviewRef.current) {
+      URL.revokeObjectURL(photoPreviewRef.current);
+      photoPreviewRef.current = null;
+    }
+    if (file) {
+      const objectUrl = URL.createObjectURL(file);
+      photoPreviewRef.current = objectUrl;
+      setPhotoPreview(objectUrl);
+    } else {
+      setPhotoPreview(null);
+    }
+  };
+
+  const handlePhotoClear = () => {
+    setPhotoFile(null);
+    if (photoPreviewRef.current) {
+      URL.revokeObjectURL(photoPreviewRef.current);
+      photoPreviewRef.current = null;
+    }
+    setPhotoPreview(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
 
   return (
     <Card
@@ -126,7 +166,13 @@ export default function SignupFormCard({
             </Alert>
           ) : null}
 
-          <Box component={Form} method="post" onSubmit={onSubmit} noValidate>
+          <Box
+            component={Form}
+            method="post"
+            encType="multipart/form-data"
+            onSubmit={onSubmit}
+            noValidate
+          >
             <Stack spacing={1.5}>
               <TextField
                 placeholder="Your full name"
@@ -185,6 +231,71 @@ export default function SignupFormCard({
                   },
                 }}
               />
+
+              <Stack spacing={1}>
+                <Typography
+                  sx={{
+                    color: UI.text2,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  Profile photo (optional)
+                </Typography>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Avatar
+                    src={photoPreview ?? undefined}
+                    sx={{
+                      width: 56,
+                      height: 56,
+                      background: UI.brandGrad,
+                      color: "white",
+                      fontWeight: 900,
+                    }}
+                  >
+                    <PersonIcon />
+                  </Avatar>
+                  <Stack spacing={0.25} sx={{ flex: 1, minWidth: 0 }}>
+                    <Button
+                      component="label"
+                      variant="outlined"
+                      type="button"
+                      size="small"
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: 999,
+                        alignSelf: "flex-start",
+                        borderColor: UI.border2,
+                        color: UI.text,
+                      }}
+                    >
+                      {photoFile ? "Change photo" : "Upload photo"}
+                      <input
+                        ref={photoInputRef}
+                        hidden
+                        accept="image/*"
+                        name="image"
+                        type="file"
+                        onChange={handlePhotoChange}
+                      />
+                    </Button>
+                    <Typography variant="caption" sx={{ color: UI.text3 }}>
+                      {photoFile ? photoFile.name : "JPG or PNG recommended."}
+                    </Typography>
+                  </Stack>
+                  {photoFile ? (
+                    <Button
+                      type="button"
+                      size="small"
+                      onClick={handlePhotoClear}
+                      sx={{ textTransform: "none", color: UI.text2 }}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </Stack>
+              </Stack>
 
               <TextField
                 label="Email"
