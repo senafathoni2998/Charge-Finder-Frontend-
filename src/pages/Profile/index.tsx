@@ -30,6 +30,16 @@ import ChargingHistoryCard, {
 export { profileAction, profileLoader } from "./profileRoute";
 
 const CHARGING_VEHICLE_REFRESH_MS = 60000;
+const ASSET_BASE_URL = import.meta.env.VITE_APP_ASSET_URL?.trim() || "";
+
+const resolveAssetUrl = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^(https?:\/\/|data:|blob:)/i.test(trimmed)) return trimmed;
+  if (!ASSET_BASE_URL) return trimmed;
+  return `${ASSET_BASE_URL.replace(/\/+$/, "")}/${trimmed.replace(/^\/+/, "")}`;
+};
 
 const toCleanString = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
@@ -253,6 +263,7 @@ export default function ProfilePage() {
     () => strengthLabel(newPassword),
     [newPassword]
   );
+  const profileImageUrl = resolveAssetUrl(loaderData?.user?.image);
 
   const displayName = useMemo(() => {
     console.log("profileName:", profileName);
@@ -547,6 +558,7 @@ export default function ProfilePage() {
             email={email}
             regionLabel={regionLabel}
             initials={initials}
+            avatarUrl={profileImageUrl}
             onEditProfile={handleOpenProfileEditor}
             onChangePassword={handleOpenPasswordEditor}
           />

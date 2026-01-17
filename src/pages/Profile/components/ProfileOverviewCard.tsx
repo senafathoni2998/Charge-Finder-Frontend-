@@ -20,6 +20,7 @@ type ProfileOverviewCardProps = {
   email: string | null;
   regionLabel: string;
   initials: string;
+  avatarUrl?: string | null;
   onEditProfile: () => void;
   onChangePassword: () => void;
 };
@@ -30,6 +31,7 @@ export default function ProfileOverviewCard({
   email,
   regionLabel,
   initials,
+  avatarUrl,
   onEditProfile,
   onChangePassword,
 }: ProfileOverviewCardProps) {
@@ -55,6 +57,7 @@ export default function ProfileOverviewCard({
             alignItems={{ sm: "center" }}
           >
             <Avatar
+              src={avatarUrl ?? undefined}
               sx={{
                 width: 64,
                 height: 64,
