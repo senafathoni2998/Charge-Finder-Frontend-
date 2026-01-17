@@ -16,6 +16,7 @@ export type StationFilters = {
   status: FilterStatus;
   connectorSet: Set<ConnectorType>;
   minKW: number;
+  radiusKm: number;
 };
 
 export type StationBounds = {

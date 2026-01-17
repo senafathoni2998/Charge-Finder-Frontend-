@@ -32,6 +32,7 @@ export default function MainPage() {
     new Set()
   );
   const [minKW, setMinKW] = useState(0);
+  const [radiusKm, setRadiusKm] = useState(STATION_RADIUS_KM);
   const [useCarFilter, setUseCarFilter] = useState(false);
   const [carFilterTouched, setCarFilterTouched] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export default function MainPage() {
         signal: controller.signal,
         lat: userCenter.lat,
         lng: userCenter.lng,
-        radiusKm: STATION_RADIUS_KM,
+        radiusKm,
       });
       if (!active) return;
       setStations(result.ok ? result.stations : []);
@@ -79,7 +80,7 @@ export default function MainPage() {
       active = false;
       controller.abort();
     };
-  }, [geo.requestId, userCenter.lat, userCenter.lng]);
+  }, [geo.requestId, userCenter.lat, userCenter.lng, radiusKm]);
   const activeCar = useMemo(() => {
     if (!isAuthenticated) return null;
     return cars.find((c) => c.id === activeCarId) ?? null;
@@ -120,10 +121,19 @@ export default function MainPage() {
         status,
         connectorSet: effectiveConnectorSet,
         minKW: effectiveMinKW,
+        radiusKm,
       },
       userCenter
     );
-  }, [stations, q, status, effectiveConnectorSet, effectiveMinKW, userCenter]);
+  }, [
+    stations,
+    q,
+    status,
+    effectiveConnectorSet,
+    effectiveMinKW,
+    radiusKm,
+    userCenter,
+  ]);
 
   const selectedStation = useMemo(
     () => filtered.find((station) => station.id === selectedId) || null,
@@ -256,6 +266,7 @@ export default function MainPage() {
             connectorSet={connectorSet}
             minKW={minKW}
             effectiveMinKW={effectiveMinKW}
+            radiusKm={radiusKm}
             useCarFilter={useCarFilter}
             isAuthenticated={isAuthenticated}
             activeCarId={activeCarId}
@@ -267,6 +278,7 @@ export default function MainPage() {
             onStatusChange={setStatus}
             onToggleConnector={handleToggleConnector}
             onMinKWChange={setMinKW}
+            onRadiusKmChange={setRadiusKm}
             onSelectCar={handleSelectCar}
             onToggleUseCarFilter={handleToggleUseCarFilter}
             onLogin={handleLogin}
@@ -293,6 +305,7 @@ export default function MainPage() {
             connectorSet={connectorSet}
             minKW={minKW}
             effectiveMinKW={effectiveMinKW}
+            radiusKm={radiusKm}
             useCarFilter={useCarFilter}
             isAuthenticated={isAuthenticated}
             activeCarId={activeCarId}
@@ -304,6 +317,7 @@ export default function MainPage() {
             onStatusChange={setStatus}
             onToggleConnector={handleToggleConnector}
             onMinKWChange={setMinKW}
+            onRadiusKmChange={setRadiusKm}
             onSelectCar={handleSelectCar}
             onToggleUseCarFilter={handleToggleUseCarFilter}
             onLogin={handleLogin}

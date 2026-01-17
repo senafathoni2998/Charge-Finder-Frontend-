@@ -67,7 +67,14 @@ export function boundsFromStations(stations) {
 
 export function filterStations(stations, filters, userCenter) {
   const lower = filters.q.toLowerCase();
+  const maxDistanceKm = Number.isFinite(filters.radiusKm)
+    ? Number(filters.radiusKm)
+    : 0;
   return stations
+    .map((s) => {
+      const distanceKm = haversineKm(userCenter, { lat: s.lat, lng: s.lng });
+      return { ...s, distanceKm };
+    })
     .filter((s) => {
       const matchesQ = !filters.q
         ? true
@@ -86,11 +93,17 @@ export function filterStations(stations, filters, userCenter) {
         ? s.connectors.some((c) => c.powerKW >= filters.minKW)
         : true;
 
-      return matchesQ && matchesStatus && matchesConnector && matchesMinKw;
-    })
-    .map((s) => {
-      const distanceKm = haversineKm(userCenter, { lat: s.lat, lng: s.lng });
-      return { ...s, distanceKm };
+      const matchesDistance = maxDistanceKm
+        ? s.distanceKm <= maxDistanceKm
+        : true;
+
+      return (
+        matchesQ &&
+        matchesStatus &&
+        matchesConnector &&
+        matchesMinKw &&
+        matchesDistance
+      );
     })
     .sort((a, b) => {
       const chargingDelta =

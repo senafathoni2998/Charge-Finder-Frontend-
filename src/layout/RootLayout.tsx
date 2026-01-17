@@ -24,9 +24,10 @@ export default function RootLayout() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const showBack = location.pathname !== "/";
+  const hideProfileButton = location.pathname.startsWith("/profile");
   const isMdUp = useAppSelector((state) => state.app.isMdMode);
   const isAdmin = useAppSelector(
-    (state) => state.auth.isAuthenticated && state.auth.role === "admin"
+    (state) => state.auth.isAuthenticated && state.auth.role === "admin",
   );
   const dispatch = useAppDispatch();
   const isRouteLoading = navigation.state === "loading";
@@ -44,6 +45,14 @@ export default function RootLayout() {
     if (path.startsWith("/profile")) return "Profile";
     return "ChargeFinder";
   })();
+  const navigateBack = () => {
+    const path = location.pathname;
+    if (path === "/profile") {
+      navigate("/");
+      return;
+    }
+    navigate(-1);
+  };
 
   return (
     <Box sx={{ minHeight: "100dvh", backgroundColor: UI.bg }}>
@@ -76,7 +85,7 @@ export default function RootLayout() {
           {showBack && (
             <Tooltip title="Back">
               <IconButton
-                onClick={() => navigate(-1)}
+                onClick={navigateBack}
                 sx={{
                   border: `1px solid ${UI.border2}`,
                   borderRadius: 3,
@@ -132,22 +141,24 @@ export default function RootLayout() {
             </Tooltip>
           )}
 
-          <Tooltip title="Profile">
-            <IconButton
-              onClick={() => navigate("/profile")}
-              sx={{
-                borderRadius: 3,
-                color: UI.text,
-                ":hover": {
-                  border: `1px solid ${UI.border2}`,
-                  backgroundColor: "rgba(10,10,16,0.03)",
-                },
-              }}
-              aria-label="Open profile"
-            >
-              <PersonIcon />
-            </IconButton>
-          </Tooltip>
+          {!hideProfileButton && (
+            <Tooltip title="Profile">
+              <IconButton
+                onClick={() => navigate("/profile")}
+                sx={{
+                  borderRadius: 3,
+                  color: UI.text,
+                  ":hover": {
+                    border: `1px solid ${UI.border2}`,
+                    backgroundColor: "rgba(10,10,16,0.03)",
+                  },
+                }}
+                aria-label="Open profile"
+              >
+                <PersonIcon />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {!isMdUp && (
             <Tooltip title="Filters">

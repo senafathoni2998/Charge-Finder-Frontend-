@@ -32,6 +32,7 @@ type FiltersPanelProps = {
   connectorSet: Set<ConnectorType>;
   minKW: number;
   effectiveMinKW: number;
+  radiusKm: number;
   useCarFilter: boolean;
   isAuthenticated: boolean;
   activeCarId: string | null;
@@ -43,6 +44,7 @@ type FiltersPanelProps = {
   onStatusChange: (value: FilterStatus) => void;
   onToggleConnector: (connector: ConnectorType) => void;
   onMinKWChange: (value: number) => void;
+  onRadiusKmChange: (value: number) => void;
   onSelectCar: (carId: string) => void;
   onToggleUseCarFilter: (value: boolean) => void;
   onLogin: () => void;
@@ -57,6 +59,7 @@ export default function FiltersPanel({
   connectorSet,
   minKW,
   effectiveMinKW,
+  radiusKm,
   useCarFilter,
   isAuthenticated,
   activeCarId,
@@ -68,6 +71,7 @@ export default function FiltersPanel({
   onStatusChange,
   onToggleConnector,
   onMinKWChange,
+  onRadiusKmChange,
   onSelectCar,
   onToggleUseCarFilter,
   onLogin,
@@ -305,6 +309,27 @@ export default function FiltersPanel({
                     Connector filters are driven by your car profile.
                   </Typography>
                 ) : null}
+              </Box>
+
+              <Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    Distance
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    {Number.isFinite(radiusKm) ? radiusKm : 0} km
+                  </Typography>
+                </Stack>
+                <Slider
+                  value={Number.isFinite(radiusKm) ? radiusKm : 0}
+                  onChange={(_, value) =>
+                    onRadiusKmChange(Array.isArray(value) ? value[0] : value)
+                  }
+                  step={1}
+                  min={1}
+                  max={50}
+                  sx={{ mt: 1 }}
+                />
               </Box>
 
               <Box>

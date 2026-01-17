@@ -54,7 +54,7 @@ export default function StationsList({
               No stations match your filters.
             </Typography>
             <Typography variant="body2" sx={{ color: UI.text2, mt: 0.5 }}>
-              Try clearing connector or lowering the minimum kW.
+              Try increasing distance, clearing connector, or lowering the minimum kW.
             </Typography>
           </Box>
         )}
