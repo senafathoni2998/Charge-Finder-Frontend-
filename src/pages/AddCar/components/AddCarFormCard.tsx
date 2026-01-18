@@ -11,12 +11,14 @@ type AddCarFormValues = {
   name: string;
   connectors: Set<ConnectorType>;
   minKW: number;
+  batteryCapacity: string;
 };
 
 type AddCarFormHandlers = {
   onNameChange: (value: string) => void;
   onToggleConnector: (connector: ConnectorType) => void;
   onMinKWChange: (value: number) => void;
+  onBatteryCapacityChange: (value: string) => void;
 };
 
 type AddCarFormCardProps = {
@@ -116,6 +118,25 @@ export default function AddCarFormCard({
               min={minPower.min}
               max={minPower.max}
               step={minPower.step}
+            />
+
+            <TextField
+              label="Battery capacity (kWh)"
+              name="batteryCapacity"
+              type="number"
+              value={values.batteryCapacity}
+              onChange={(event) =>
+                handlers.onBatteryCapacityChange(event.target.value)
+              }
+              placeholder="e.g. 58"
+              fullWidth
+              inputProps={{ min: 0, step: 1 }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 3,
+                  backgroundColor: "rgba(10,10,16,0.02)",
+                },
+              }}
             />
 
             <Divider sx={{ borderColor: UI.border2 }} />

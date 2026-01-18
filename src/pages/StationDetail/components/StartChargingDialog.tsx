@@ -88,7 +88,11 @@ export default function StartChargingDialog({
                       key={vehicle.id}
                       value={vehicle.id}
                       control={<Radio />}
-                      label={vehicle.name}
+                      label={
+                        Number.isFinite(vehicle.batteryCapacity)
+                          ? `${vehicle.name} | ${vehicle.batteryCapacity} kWh`
+                          : vehicle.name
+                      }
                     />
                   ))}
                 </Stack>

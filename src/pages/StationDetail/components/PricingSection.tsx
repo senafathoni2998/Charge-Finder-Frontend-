@@ -1,17 +1,15 @@
-import { Box, Button, Chip, Divider, Skeleton, Stack, Typography } from "@mui/material";
+import { Button, Divider, Skeleton, Stack, Typography } from "@mui/material";
 import { UI } from "../../../theme/theme";
 import { formatCurrency } from "../../../utils/distance";
-import type { Station, Ticket } from "../types";
+import type { Station } from "../types";
 import InfoRow from "./InfoRow";
 import SectionCard from "./SectionCard";
 
 type PricingSectionProps = {
   loading: boolean;
   station: Station | null;
-  ticket: Ticket | null;
-  ticketPriceLabel: string;
-  ticketKwh: number;
   paymentActionLabel: string;
+  paymentDisabled: boolean;
   onPaymentOpen: () => void;
 };
 
@@ -19,10 +17,8 @@ type PricingSectionProps = {
 export default function PricingSection({
   loading,
   station,
-  ticket,
-  ticketPriceLabel,
-  ticketKwh,
   paymentActionLabel,
+  paymentDisabled,
   onPaymentOpen,
 }: PricingSectionProps) {
   return (
@@ -35,58 +31,21 @@ export default function PricingSection({
         </Stack>
       ) : (
         <Stack spacing={1.25}>
-          <Box
+          <Button
+            variant="contained"
+            onClick={onPaymentOpen}
+            disabled={paymentDisabled || !station}
+            fullWidth
             sx={{
-              p: 1.25,
+              textTransform: "none",
               borderRadius: 3,
-              border: `1px solid ${UI.border2}`,
-              backgroundColor: "rgba(10,10,16,0.02)",
+              borderColor: UI.border,
+              color: "white",
+              background: UI.brandGradStrong,
             }}
           >
-            <Stack spacing={1}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="caption" sx={{ color: UI.text3 }}>
-                  Charging ticket
-                </Typography>
-                {ticket ? (
-                  <Chip
-                    size="small"
-                    label="Ready"
-                    sx={{
-                      borderRadius: 999,
-                      backgroundColor: "rgba(0,229,255,0.12)",
-                      border: "1px solid rgba(0,229,255,0.3)",
-                      color: UI.text,
-                      fontWeight: 800,
-                    }}
-                  />
-                ) : null}
-              </Stack>
-
-              <Typography sx={{ fontWeight: 900, color: UI.text }}>
-                {ticket ? ticket.priceLabel : ticketPriceLabel}
-              </Typography>
-              <Typography variant="caption" sx={{ color: UI.text2 }}>
-                {ticket
-                  ? `Paid with ${ticket.methodLabel}`
-                  : `Estimated ${ticketKwh} kWh pack`}
-              </Typography>
-              <Button
-                variant={ticket ? "outlined" : "contained"}
-                onClick={onPaymentOpen}
-                disabled={!station}
-                sx={{
-                  textTransform: "none",
-                  borderRadius: 3,
-                  borderColor: UI.border,
-                  color: ticket ? UI.text : "white",
-                  background: ticket ? "transparent" : UI.brandGradStrong,
-                }}
-              >
-                {paymentActionLabel}
-              </Button>
-            </Stack>
-          </Box>
+            {paymentActionLabel}
+          </Button>
           <Divider sx={{ borderColor: UI.border2 }} />
           <InfoRow
             label="Per kWh"

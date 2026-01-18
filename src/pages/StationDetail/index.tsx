@@ -35,7 +35,7 @@ import {
 } from "./constants";
 import { buildMapsUrl, getSharePayload, getTicketPriceLabel } from "./utils";
 import type { ChargingStatus, Station, Ticket } from "./types";
-import type { ConnectorType } from "../../models/model";
+import type { ChargingSpeed, ConnectorType } from "../../models/model";
 import StationOverviewSection from "./components/StationOverviewSection";
 import ConnectorsSection from "./components/ConnectorsSection";
 import AmenitiesSection from "./components/AmenitiesSection";
@@ -68,6 +68,17 @@ const toProgressPercent = (value: unknown): number | null => {
   const num = Number(value);
   if (!Number.isFinite(num)) return null;
   return Math.min(100, Math.max(0, Math.round(num)));
+};
+
+const toChargingSpeed = (value: unknown): ChargingSpeed | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (normalized === "NORMAL") return "NORMAL";
+  if (normalized === "FAST") return "FAST";
+  if (normalized === "ULTRA_FAST" || normalized === "ULTRAFAST") {
+    return "ULTRA_FAST";
+  }
+  return null;
 };
 
 const toDateMs = (value: unknown): number | null => {
@@ -192,10 +203,14 @@ export default function StationDetailPage() {
   const [selectedPaymentId, setSelectedPaymentId] = useState(
     PAYMENT_METHODS[0].id
   );
+  const [chargingSpeed, setChargingSpeed] = useState<ChargingSpeed>("NORMAL");
+  const [ticketKwhInput, setTicketKwhInput] = useState("");
+  const [ticketKwhTouched, setTicketKwhTouched] = useState(false);
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [ticketRequestError, setTicketRequestError] = useState<string | null>(
     null
   );
+  const [ticketErrorToast, setTicketErrorToast] = useState<string | null>(null);
   const [ticketRequestLoading, setTicketRequestLoading] = useState(false);
   const [chargingOpen, setChargingOpen] = useState(false);
   const [chargingProgress, setChargingProgress] = useState(0);
@@ -274,7 +289,6 @@ export default function StationDetailPage() {
     [selectedPaymentId]
   );
 
-  const ticketPriceLabel = getTicketPriceLabel(station, TICKET_KWH);
   const remainingMinutes = Math.max(
     0,
     Math.ceil(((100 - chargingProgress) / 100) * TOTAL_CHARGE_MINUTES)
@@ -289,7 +303,6 @@ export default function StationDetailPage() {
     if (!Number.isFinite(diffMs)) return null;
     return Math.max(0, Math.ceil(diffMs / 60000));
   }, [chargingProgress, chargingStatus, estimatedCompletionAt]);
-  const deliveredKwh = Math.round((TICKET_KWH * chargingProgress) / 100);
 
   const distanceKm = useMemo(() => {
     if (!station) return null;
@@ -300,6 +313,12 @@ export default function StationDetailPage() {
     () => cars.find((c) => c.id === activeCarId) ?? null,
     [cars, activeCarId]
   );
+  const activeCarBatteryCapacity = Number.isFinite(activeCar?.batteryCapacity)
+    ? Number(activeCar?.batteryCapacity)
+    : null;
+  const activeCarBatteryPercent = Number.isFinite(activeCar?.batteryPercent)
+    ? Number(activeCar?.batteryPercent)
+    : null;
   const activeStationId = station?.id ?? null;
 
   const preferredConnectorType = useMemo(() => {
@@ -358,12 +377,87 @@ export default function StationDetailPage() {
     );
   }, [activeCar, station]);
 
+  const effectiveBatteryPercent = useMemo(() => {
+    if (Number.isFinite(chargingBatteryPercent)) {
+      return Math.min(100, Math.max(0, Number(chargingBatteryPercent)));
+    }
+    if (Number.isFinite(activeCarBatteryPercent)) {
+      return Math.min(100, Math.max(0, Number(activeCarBatteryPercent)));
+    }
+    return null;
+  }, [chargingBatteryPercent, activeCarBatteryPercent]);
+
+  const defaultTicketKwh = useMemo(() => {
+    if (!Number.isFinite(activeCarBatteryCapacity)) return TICKET_KWH;
+    if (effectiveBatteryPercent == null) return TICKET_KWH;
+    const remainingKwh =
+      ((100 - effectiveBatteryPercent) / 100) * activeCarBatteryCapacity;
+    if (!Number.isFinite(remainingKwh)) return TICKET_KWH;
+    return Math.max(1, Math.round(remainingKwh * 10) / 10);
+  }, [activeCarBatteryCapacity, effectiveBatteryPercent]);
+
+  const parsedTicketKwh = useMemo(() => {
+    const trimmed = ticketKwhInput.trim();
+    if (!trimmed) return null;
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? value : null;
+  }, [ticketKwhInput]);
+  const hasTicketKwhInput = ticketKwhInput.trim().length > 0;
+  const isTicketKwhValid =
+    !hasTicketKwhInput || (parsedTicketKwh != null && parsedTicketKwh > 0);
+
+  const ticketKwh = useMemo(() => {
+    if (parsedTicketKwh != null && parsedTicketKwh > 0) {
+      return parsedTicketKwh;
+    }
+    return defaultTicketKwh;
+  }, [parsedTicketKwh, defaultTicketKwh]);
+
+  const ticketPricePerKwh = useMemo(() => {
+    if (!station) return null;
+    const base = Number.isFinite(station.pricing?.perKwh)
+      ? station.pricing.perKwh
+      : null;
+    const fast = Number.isFinite(station.pricing?.fastPerKwh)
+      ? station.pricing.fastPerKwh
+      : null;
+    const ultra = Number.isFinite(station.pricing?.ultraFastPerKwh)
+      ? station.pricing.ultraFastPerKwh
+      : null;
+    if (chargingSpeed === "FAST") {
+      return fast ?? base;
+    }
+    if (chargingSpeed === "ULTRA_FAST") {
+      return ultra ?? fast ?? base;
+    }
+    return base;
+  }, [chargingSpeed, station]);
+
+  useEffect(() => {
+    if (ticketKwhTouched) return;
+    if (!Number.isFinite(defaultTicketKwh)) return;
+    setTicketKwhInput(String(defaultTicketKwh));
+  }, [defaultTicketKwh, ticketKwhTouched]);
+
+  const ticketPriceLabel = getTicketPriceLabel(
+    station,
+    ticketKwh,
+    ticketPricePerKwh
+  );
+  const ticketPriceLabelRef = useRef(ticketPriceLabel);
+  useEffect(() => {
+    ticketPriceLabelRef.current = ticketPriceLabel;
+  }, [ticketPriceLabel]);
+  const deliveredKwh =
+    Math.round(((ticketKwh * chargingProgress) / 100) * 10) / 10;
+
   const canCharge =
     isAuthenticated &&
     station?.status === "AVAILABLE" &&
     (isCompatible ?? true) &&
     !!ticket;
   const canStartCharging = canCharge && chargingStatus !== "charging";
+  const isCharging = chargingStatus === "charging";
   const chargingActionLabel =
     chargingStatus === "charging" ? "View charging" : "Start charging";
   const paymentActionLabel = !isAuthenticated
@@ -371,6 +465,15 @@ export default function StationDetailPage() {
     : ticket
     ? "Change payment"
     : "Buy charging ticket";
+
+  const handleTicketKwhChange = (value: string) => {
+    setTicketKwhInput(value);
+    if (!ticketKwhTouched) setTicketKwhTouched(true);
+  };
+
+  const handleChargingSpeedChange = (value: ChargingSpeed) => {
+    setChargingSpeed(value);
+  };
 
   useEffect(() => {
     if (!activeStationId || !isAuthenticated) return;
@@ -395,22 +498,33 @@ export default function StationDetailPage() {
           ? (result.ticket as Record<string, unknown>)
           : {};
 
-      const normalizedTicket = buildTicketFromServer(payload, ticketPriceLabel);
+      const speedFromTicket =
+        toChargingSpeed(payload.chargingSpeed) ??
+        toChargingSpeed(payload.charging_speed) ??
+        null;
+      if (speedFromTicket) {
+        setChargingSpeed(speedFromTicket);
+      }
+
+      const normalizedTicket = buildTicketFromServer(
+        payload,
+        ticketPriceLabelRef.current
+      );
       setTicket(normalizedTicket);
-    if (normalizedTicket.progressPercent != null) {
-      setChargingProgress(normalizedTicket.progressPercent);
-    }
-    if (normalizedTicket.chargingStatus) {
-      setChargingStatus(normalizedTicket.chargingStatus);
-    }
-  };
+      if (normalizedTicket.progressPercent != null) {
+        setChargingProgress(normalizedTicket.progressPercent);
+      }
+      if (normalizedTicket.chargingStatus) {
+        setChargingStatus(normalizedTicket.chargingStatus);
+      }
+    };
 
     loadActiveTicket();
     return () => {
       active = false;
       controller.abort();
     };
-  }, [activeStationId, isAuthenticated, ticketPriceLabel]);
+  }, [activeStationId, isAuthenticated]);
 
   // Redirects unauthenticated users to login while preserving return path.
   const handleLoginRedirect = () => {
@@ -465,10 +579,17 @@ export default function StationDetailPage() {
     const result = await requestChargingTicket({
       stationId: station.id,
       connectorType: preferredConnectorType,
+      chargingSpeed,
+      ticketKwh,
     });
 
     if (!result.ok) {
-      setTicketRequestError(result.error || "Could not request ticket.");
+      const fallbackMessage = ticket
+        ? "Could not update payment."
+        : "Could not request ticket.";
+      const message = result.error || fallbackMessage;
+      setTicketRequestError(message);
+      setTicketErrorToast(message);
       setTicketRequestLoading(false);
       return;
     }
@@ -478,6 +599,13 @@ export default function StationDetailPage() {
       payload && typeof payload === "object"
         ? (payload as Record<string, unknown>)
         : {};
+    const speedFromTicket =
+      toChargingSpeed(payloadRecord.chargingSpeed) ??
+      toChargingSpeed(payloadRecord.charging_speed) ??
+      null;
+    if (speedFromTicket) {
+      setChargingSpeed(speedFromTicket);
+    }
     const ticketId =
       toCleanString(payloadRecord.id ?? payloadRecord._id) ||
       `TICKET-${Date.now()}`;
@@ -589,6 +717,7 @@ export default function StationDetailPage() {
   // Opens the payment dialog or redirects to login if needed.
   const handlePaymentOpen = () => {
     if (!ensureSessionValid()) return;
+    if (isCharging) return;
     if (!isAuthenticated) {
       handleLoginRedirect();
       return;
@@ -768,7 +897,7 @@ export default function StationDetailPage() {
       if (ticketPayload) {
         const normalizedTicket = buildTicketFromServer(
           ticketPayload,
-          ticketPriceLabel
+          ticketPriceLabelRef.current
         );
         setTicket(normalizedTicket);
         if (normalizedTicket.progressPercent != null) {
@@ -830,7 +959,7 @@ export default function StationDetailPage() {
     return () => {
       socket.close();
     };
-  }, [stationId, ticketPriceLabel]);
+  }, [stationId]);
 
   const openGoogleMaps = () => {
     if (!station || typeof window === "undefined") return;
@@ -953,10 +1082,8 @@ export default function StationDetailPage() {
           <PricingSection
             loading={loading}
             station={station}
-            ticket={ticket}
-            ticketPriceLabel={ticketPriceLabel}
-            ticketKwh={TICKET_KWH}
             paymentActionLabel={paymentActionLabel}
+            paymentDisabled={isCharging}
             onPaymentOpen={handlePaymentOpen}
           />
           <CoordinatesSection loading={loading} station={station} />
@@ -966,13 +1093,21 @@ export default function StationDetailPage() {
       <PaymentDialog
         open={paymentOpen && isAuthenticated}
         onClose={handleClosePayment}
-        ticketKwh={TICKET_KWH}
+        ticketKwh={ticketKwh}
+        ticketKwhInput={ticketKwhInput}
+        ticketKwhSuggested={defaultTicketKwh}
+        ticketKwhValid={isTicketKwhValid}
+        onTicketKwhChange={handleTicketKwhChange}
+        chargingSpeed={chargingSpeed}
+        onChargingSpeedChange={handleChargingSpeedChange}
+        pricePerKwh={ticketPricePerKwh}
+        currency={station?.pricing?.currency ?? null}
         ticketPriceLabel={ticketPriceLabel}
         selectedPaymentId={selectedPaymentId}
         onPaymentChange={setSelectedPaymentId}
         paymentMethods={PAYMENT_METHODS}
         onConfirm={handleBuyTicket}
-        canSubmit={!!station && isAuthenticated}
+        canSubmit={!!station && isAuthenticated && isTicketKwhValid}
         hasTicket={!!ticket}
         submitError={ticketRequestError}
         isSubmitting={ticketRequestLoading}
@@ -987,7 +1122,7 @@ export default function StationDetailPage() {
         chargingProgress={chargingProgress}
         displayProgress={displayChargingPercent}
         ticket={ticket}
-        ticketKwh={TICKET_KWH}
+        ticketKwh={ticketKwh}
         deliveredKwh={deliveredKwh}
         remainingMinutes={remainingMinutes}
         estimatedRemainingMinutes={estimatedRemainingMinutes}
@@ -1036,6 +1171,21 @@ export default function StationDetailPage() {
           sx={{ borderRadius: 3 }}
         >
           {sessionMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={!!ticketErrorToast}
+        autoHideDuration={4000}
+        onClose={() => setTicketErrorToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setTicketErrorToast(null)}
+          severity="error"
+          variant="filled"
+          sx={{ borderRadius: 3 }}
+        >
+          {ticketErrorToast}
         </Alert>
       </Snackbar>
     </Box>

@@ -15,4 +15,8 @@ export const getCarFormDefaults = (car: UserCar | null): EditCarFormValues => ({
   name: car?.name ?? "",
   connectors: new Set(car?.connectorTypes ?? []),
   minKW: Number.isFinite(car?.minKW ?? Number.NaN) ? car?.minKW ?? 0 : 0,
+  batteryCapacity:
+    car?.batteryCapacity != null && Number.isFinite(car.batteryCapacity)
+      ? String(car.batteryCapacity)
+      : "",
 });

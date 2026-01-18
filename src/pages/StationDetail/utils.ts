@@ -8,10 +8,15 @@ export const buildMapsUrl = (lat: number, lng: number) =>
 // Computes the ticket price label for a given station and kWh amount.
 export const getTicketPriceLabel = (
   station: Station | null,
-  ticketKwh: number
+  ticketKwh: number,
+  pricePerKwhOverride?: number | null
 ) => {
   if (!station) return "N/A";
-  return formatCurrency(station.pricing.currency, station.pricing.perKwh * ticketKwh);
+  const perKwh = Number.isFinite(pricePerKwhOverride)
+    ? Number(pricePerKwhOverride)
+    : station.pricing.perKwh;
+  if (!Number.isFinite(perKwh)) return "—";
+  return formatCurrency(station.pricing.currency, perKwh * ticketKwh);
 };
 
 // Builds the payload used for native share.

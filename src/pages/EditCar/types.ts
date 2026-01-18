@@ -10,6 +10,7 @@ export type EditCarFormValues = {
   name: string;
   connectors: Set<ConnectorType>;
   minKW: number;
+  batteryCapacity: string;
 };
 
 // Event handlers exposed by the edit car form state hook.
@@ -17,4 +18,5 @@ export type EditCarFormHandlers = {
   onNameChange: (value: string) => void;
   onToggleConnector: (connector: ConnectorType) => void;
   onMinKWChange: (value: number) => void;
+  onBatteryCapacityChange: (value: string) => void;
 };

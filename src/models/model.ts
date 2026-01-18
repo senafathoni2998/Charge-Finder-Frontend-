@@ -1,5 +1,6 @@
 export type Availability = "AVAILABLE" | "BUSY" | "OFFLINE";
 export type ConnectorType = "CCS2" | "Type2" | "CHAdeMO";
+export type ChargingSpeed = "NORMAL" | "FAST" | "ULTRA_FAST";
 
 export type Connector = {
   type: ConnectorType;
@@ -16,6 +17,8 @@ export type StationPhoto = {
 export type StationPricing = {
   currency: string;
   perKwh: number;
+  fastPerKwh?: number;
+  ultraFastPerKwh?: number;
   perMinute?: number;
   parkingFee?: string;
 };

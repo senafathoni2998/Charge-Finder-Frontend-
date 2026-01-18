@@ -89,6 +89,19 @@ const normalizeVehicle = (vehicle: unknown): UserCar | null => {
   const minKW = Number.isFinite(Number(data.min_power))
     ? Number(data.min_power)
     : 0;
+  const batteryCapacityRaw =
+    typeof data.batteryCapacity === "number"
+      ? data.batteryCapacity
+      : typeof data.batteryCapacity === "string"
+      ? Number(data.batteryCapacity)
+      : typeof data.battery_capacity === "number"
+      ? data.battery_capacity
+      : typeof data.battery_capacity === "string"
+      ? Number(data.battery_capacity)
+      : Number.NaN;
+  const batteryCapacity = Number.isFinite(batteryCapacityRaw)
+    ? Number(batteryCapacityRaw)
+    : null;
   const chargingStatus =
     typeof data.chargingStatus === "string" && data.chargingStatus.trim()
       ? data.chargingStatus.trim()
@@ -137,6 +150,7 @@ const normalizeVehicle = (vehicle: unknown): UserCar | null => {
     name,
     connectorTypes,
     minKW,
+    batteryCapacity,
     chargingStatus,
     batteryPercent,
     batteryStatus,

@@ -20,6 +20,14 @@ export async function addCarAction({ request }: { request: Request }) {
   const minKW = Number.isFinite(Number(formData.get("minKW")))
     ? Number(formData.get("minKW"))
     : 0;
+  const batteryCapacityRaw = formData.get("batteryCapacity");
+  const batteryCapacityValue =
+    typeof batteryCapacityRaw === "string" && batteryCapacityRaw.trim()
+      ? Number(batteryCapacityRaw)
+      : null;
+  const batteryCapacity = Number.isFinite(batteryCapacityValue)
+    ? batteryCapacityValue
+    : null;
 
   if (!connectorTypes.length) {
     return { error: "Select at least one connector type." };
@@ -40,6 +48,7 @@ export async function addCarAction({ request }: { request: Request }) {
         name,
         connector_type: connectorTypes,
         min_power: minKW,
+        ...(batteryCapacity != null ? { batteryCapacity } : {}),
       }),
       headers: { "Content-Type": "application/json" },
       credentials: "include",

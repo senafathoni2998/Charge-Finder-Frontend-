@@ -124,8 +124,13 @@ export default function FiltersPanel({
           />
         </Stack>
         <Accordion defaultExpanded sx={accordionSx}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={accordionSummarySx}>
-            <Typography sx={{ fontWeight: 900, color: UI.text }}>Filters</Typography>
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            sx={accordionSummarySx}
+          >
+            <Typography sx={{ fontWeight: 900, color: UI.text }}>
+              Filters
+            </Typography>
           </AccordionSummary>
           <AccordionDetails sx={accordionDetailsSx}>
             <Stack spacing={2}>
@@ -176,7 +181,9 @@ export default function FiltersPanel({
                 <ToggleButtonGroup
                   exclusive
                   value={status}
-                  onChange={(_, value) => onStatusChange((value ?? "") as FilterStatus)}
+                  onChange={(_, value) =>
+                    onStatusChange((value ?? "") as FilterStatus)
+                  }
                   size="small"
                   sx={{
                     mt: 0.5,
@@ -195,8 +202,37 @@ export default function FiltersPanel({
               </Box>
 
               <Box>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    Distance
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: UI.text3 }}>
+                    {Number.isFinite(radiusKm) ? radiusKm : 0} km
+                  </Typography>
+                </Stack>
+                <Slider
+                  value={Number.isFinite(radiusKm) ? radiusKm : 0}
+                  onChange={(_, value) =>
+                    onRadiusKmChange(Array.isArray(value) ? value[0] : value)
+                  }
+                  step={1}
+                  min={1}
+                  max={50}
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+
+              <Box>
                 {isAuthenticated ? (
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                  >
                     <Typography variant="caption" sx={{ color: UI.text3 }}>
                       My car
                     </Typography>
@@ -210,7 +246,9 @@ export default function FiltersPanel({
                       size="small"
                       label="Selected car"
                       value={activeCarId ?? ""}
-                      onChange={(event) => onSelectCar(String(event.target.value))}
+                      onChange={(event) =>
+                        onSelectCar(String(event.target.value))
+                      }
                       fullWidth
                       sx={{
                         mt: 0.5,
@@ -223,6 +261,9 @@ export default function FiltersPanel({
                       {cars.map((car) => (
                         <MenuItem key={car.id} value={car.id}>
                           {car.name}
+                          {Number.isFinite(car.batteryCapacity)
+                            ? ` | ${car.batteryCapacity} kWh`
+                            : ""}
                         </MenuItem>
                       ))}
                     </TextField>
@@ -230,7 +271,9 @@ export default function FiltersPanel({
                       control={
                         <Switch
                           checked={useCarFilter}
-                          onChange={(event) => onToggleUseCarFilter(event.target.checked)}
+                          onChange={(event) =>
+                            onToggleUseCarFilter(event.target.checked)
+                          }
                           color="primary"
                         />
                       }
@@ -269,11 +312,19 @@ export default function FiltersPanel({
                 <Typography variant="caption" sx={{ color: UI.text3 }}>
                   Connectors
                 </Typography>
-                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ mt: 1, flexWrap: "wrap" }}
+                >
                   {CONNECTOR_OPTIONS.map((connector) => {
                     const active = connectorSet.has(connector);
-                    const chipBg = active ? "rgba(124,92,255,0.12)" : "transparent";
-                    const chipBorder = active ? "rgba(124,92,255,0.35)" : UI.border2;
+                    const chipBg = active
+                      ? "rgba(124,92,255,0.12)"
+                      : "transparent";
+                    const chipBorder = active
+                      ? "rgba(124,92,255,0.35)"
+                      : UI.border2;
                     return (
                       <Chip
                         key={connector}
@@ -312,28 +363,11 @@ export default function FiltersPanel({
               </Box>
 
               <Box>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="caption" sx={{ color: UI.text3 }}>
-                    Distance
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: UI.text3 }}>
-                    {Number.isFinite(radiusKm) ? radiusKm : 0} km
-                  </Typography>
-                </Stack>
-                <Slider
-                  value={Number.isFinite(radiusKm) ? radiusKm : 0}
-                  onChange={(_, value) =>
-                    onRadiusKmChange(Array.isArray(value) ? value[0] : value)
-                  }
-                  step={1}
-                  min={1}
-                  max={50}
-                  sx={{ mt: 1 }}
-                />
-              </Box>
-
-              <Box>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
                   <Typography variant="caption" sx={{ color: UI.text3 }}>
                     Minimum power
                   </Typography>

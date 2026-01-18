@@ -24,6 +24,7 @@ export default function AddCarPage() {
     new Set()
   );
   const [carMinKW, setCarMinKW] = useState(0);
+  const [carBatteryCapacity, setCarBatteryCapacity] = useState("");
   const [carError, setCarError] = useState<string | null>(null);
 
   // Performs client-side validation before submitting the form.
@@ -53,11 +54,13 @@ export default function AddCarPage() {
     name: carName,
     connectors: carConnectors,
     minKW: carMinKW,
+    batteryCapacity: carBatteryCapacity,
   };
   const formHandlers = {
     onNameChange: (value: string) => setCarName(value),
     onToggleConnector: handleToggleConnector,
     onMinKWChange: (value: number) => setCarMinKW(value),
+    onBatteryCapacityChange: (value: string) => setCarBatteryCapacity(value),
   };
 
   return (

@@ -111,6 +111,7 @@ export default function CarsCard({
                   typeof car.chargingStatus === "string" &&
                   car.chargingStatus.trim().toUpperCase() === "CHARGING";
                 const hasBatteryPercent = Number.isFinite(car.batteryPercent);
+                const hasBatteryCapacity = Number.isFinite(car.batteryCapacity);
                 console.log("Rendering car:", car, "isActive:", isActive);
                 return (
                   <Box
@@ -139,16 +140,16 @@ export default function CarsCard({
                         >
                           {car.name}
                         </Typography>
-                        {isActive ? (
+                        {hasBatteryPercent ? (
                           <Chip
                             size="small"
-                            label="Active"
+                            label={`Battery ${car.batteryPercent}%`}
                             sx={{
                               borderRadius: 999,
-                              backgroundColor: "rgba(0,229,255,0.12)",
-                              border: "1px solid rgba(0,229,255,0.3)",
+                              backgroundColor: "rgba(0,200,83,0.12)",
+                              border: "1px solid rgba(0,200,83,0.35)",
                               color: UI.text,
-                              fontWeight: 800,
+                              fontWeight: 700,
                             }}
                           />
                         ) : null}
@@ -166,16 +167,16 @@ export default function CarsCard({
                           />
                         ) : null}
                         <Box sx={{ flex: 1 }} />
-                        {hasBatteryPercent ? (
+                        {isActive ? (
                           <Chip
                             size="small"
-                            label={`Battery ${car.batteryPercent}%`}
+                            label="Active"
                             sx={{
                               borderRadius: 999,
-                              backgroundColor: "rgba(0,200,83,0.12)",
-                              border: "1px solid rgba(0,200,83,0.35)",
+                              backgroundColor: "rgba(0,229,255,0.12)",
+                              border: "1px solid rgba(0,229,255,0.3)",
                               color: UI.text,
-                              fontWeight: 700,
+                              fontWeight: 800,
                             }}
                           />
                         ) : null}
@@ -215,9 +216,16 @@ export default function CarsCard({
                         ) : null}
                       </Stack>
 
-                      <Typography variant="caption" sx={{ color: UI.text2 }}>
-                        Preferred minimum power: {car.minKW || 0} kW
-                      </Typography>
+                      <Stack spacing={0.25}>
+                        <Typography variant="caption" sx={{ color: UI.text2 }}>
+                          Preferred minimum power: {car.minKW || 0} kW
+                        </Typography>
+                        {hasBatteryCapacity ? (
+                          <Typography variant="caption" sx={{ color: UI.text2 }}>
+                            Battery capacity: {car.batteryCapacity} kWh
+                          </Typography>
+                        ) : null}
+                      </Stack>
                     </Stack>
                   </Box>
                 );

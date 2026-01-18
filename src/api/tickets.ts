@@ -1,8 +1,10 @@
-import type { ConnectorType } from "../models/model";
+import type { ChargingSpeed, ConnectorType } from "../models/model";
 
 type RequestChargingTicketParams = {
   stationId: string;
   connectorType?: ConnectorType;
+  chargingSpeed?: ChargingSpeed;
+  ticketKwh?: number;
   signal?: AbortSignal;
 };
 
@@ -21,6 +23,8 @@ type FetchActiveTicketResult = {
 export const requestChargingTicket = async ({
   stationId,
   connectorType,
+  chargingSpeed,
+  ticketKwh,
   signal,
 }: RequestChargingTicketParams): Promise<RequestChargingTicketResult> => {
   const baseUrl = import.meta.env.VITE_APP_BACKEND_URL;
@@ -32,11 +36,22 @@ export const requestChargingTicket = async ({
     return { ok: false, error: "Station is missing." };
   }
 
-  const payload: { stationId: string; connectorType?: ConnectorType } = {
+  const payload: {
+    stationId: string;
+    connectorType?: ConnectorType;
+    chargingSpeed?: ChargingSpeed;
+    ticketKwh?: number;
+  } = {
     stationId,
   };
   if (connectorType) {
     payload.connectorType = connectorType;
+  }
+  if (chargingSpeed) {
+    payload.chargingSpeed = chargingSpeed;
+  }
+  if (Number.isFinite(ticketKwh)) {
+    payload.ticketKwh = Number(ticketKwh);
   }
 
   try {

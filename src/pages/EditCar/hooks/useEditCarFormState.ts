@@ -44,6 +44,11 @@ export default function useEditCarFormState(
     setValues((prev) => ({ ...prev, minKW: value }));
   };
 
+  // Updates the battery capacity input.
+  const handleBatteryCapacityChange = (value: string) => {
+    setValues((prev) => ({ ...prev, batteryCapacity: value }));
+  };
+
   // Adds or removes a connector type from the selection.
   const handleToggleConnector = (connector: ConnectorType) => {
     setClientError(null);
@@ -70,6 +75,7 @@ export default function useEditCarFormState(
     onNameChange: handleNameChange,
     onToggleConnector: handleToggleConnector,
     onMinKWChange: handleMinKWChange,
+    onBatteryCapacityChange: handleBatteryCapacityChange,
   };
 
   return { values, handlers, onSubmit: handleSubmit, clientError };

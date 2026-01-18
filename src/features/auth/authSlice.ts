@@ -19,6 +19,7 @@ export type UserCar = {
   name: string;
   connectorTypes: ConnectorType[];
   minKW: number;
+  batteryCapacity?: number | null;
   chargingStatus?: string | null;
   batteryPercent?: number | null;
   batteryStatus?: string | null;
@@ -49,6 +50,21 @@ const sanitizeCar = (data: unknown): UserCar | null => {
       )
     : [];
   const minKW = Number.isFinite(raw.minKW) ? Number(raw.minKW) : 0;
+  const batteryCapacityRaw =
+    typeof raw.batteryCapacity === "number"
+      ? raw.batteryCapacity
+      : typeof raw.batteryCapacity === "string"
+      ? Number(raw.batteryCapacity)
+      : typeof (raw as { battery_capacity?: unknown }).battery_capacity ===
+        "number"
+      ? (raw as { battery_capacity?: unknown }).battery_capacity
+      : typeof (raw as { battery_capacity?: unknown }).battery_capacity ===
+        "string"
+      ? Number((raw as { battery_capacity?: unknown }).battery_capacity)
+      : Number.NaN;
+  const batteryCapacity = Number.isFinite(batteryCapacityRaw)
+    ? Number(batteryCapacityRaw)
+    : null;
   const chargingStatus =
     typeof raw.chargingStatus === "string" && raw.chargingStatus.trim()
       ? raw.chargingStatus.trim()
@@ -84,6 +100,7 @@ const sanitizeCar = (data: unknown): UserCar | null => {
     name,
     connectorTypes,
     minKW,
+    batteryCapacity,
     chargingStatus,
     batteryPercent,
     batteryStatus,
@@ -124,6 +141,7 @@ const parseLegacyCar = (raw: string | null): UserCar | null => {
       name,
       connectorTypes,
       minKW,
+      batteryCapacity: null,
       chargingStatus: null,
       batteryPercent: null,
       batteryStatus: null,
