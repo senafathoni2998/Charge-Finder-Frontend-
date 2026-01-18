@@ -28,6 +28,10 @@ type StartChargingDialogProps = {
   isSubmitting?: boolean;
 };
 
+const isVehicleCharging = (vehicle: UserCar) =>
+  typeof vehicle.chargingStatus === "string" &&
+  vehicle.chargingStatus.trim().toUpperCase() === "CHARGING";
+
 // Prompts the user to select a connector before starting a charge.
 export default function StartChargingDialog({
   open,
@@ -43,10 +47,18 @@ export default function StartChargingDialog({
 }: StartChargingDialogProps) {
   const hasOptions = connectorTypes.length > 0;
   const hasVehicles = vehicles.length > 0;
+  const hasAvailableVehicles =
+    !hasVehicles || vehicles.some((vehicle) => !isVehicleCharging(vehicle));
+  const selectedVehicle =
+    vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const selectedVehicleCharging = selectedVehicle
+    ? isVehicleCharging(selectedVehicle)
+    : false;
   const canSubmit =
     hasOptions &&
+    hasAvailableVehicles &&
     !!selectedConnectorType &&
-    (!hasVehicles || !!selectedVehicleId) &&
+    (!hasVehicles || (!!selectedVehicleId && !selectedVehicleCharging)) &&
     !isSubmitting;
 
   return (
@@ -83,20 +95,31 @@ export default function StartChargingDialog({
                 onChange={(event) => onVehicleChange(event.target.value)}
               >
                 <Stack spacing={0.75}>
-                  {vehicles.map((vehicle) => (
-                    <FormControlLabel
-                      key={vehicle.id}
-                      value={vehicle.id}
-                      control={<Radio />}
-                      label={
-                        Number.isFinite(vehicle.batteryCapacity)
-                          ? `${vehicle.name} | ${vehicle.batteryCapacity} kWh`
-                          : vehicle.name
-                      }
-                    />
-                  ))}
+                  {vehicles.map((vehicle) => {
+                    const isCharging = isVehicleCharging(vehicle);
+                    const baseLabel = Number.isFinite(vehicle.batteryCapacity)
+                      ? `${vehicle.name} | ${vehicle.batteryCapacity} kWh`
+                      : vehicle.name;
+                    const label = isCharging
+                      ? `${baseLabel} (Charging)`
+                      : baseLabel;
+                    return (
+                      <FormControlLabel
+                        key={vehicle.id}
+                        value={vehicle.id}
+                        control={<Radio />}
+                        label={label}
+                        disabled={isCharging}
+                      />
+                    );
+                  })}
                 </Stack>
               </RadioGroup>
+              {!hasAvailableVehicles ? (
+                <Typography variant="body2" sx={{ color: UI.text2 }}>
+                  All your vehicles are currently charging.
+                </Typography>
+              ) : null}
             </Box>
           ) : null}
 

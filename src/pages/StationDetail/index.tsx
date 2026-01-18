@@ -25,8 +25,8 @@ import {
 import { useGeoLocation } from "../../hooks/geolocation-hook";
 import { haversineKm } from "../../utils/distance";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout } from "../../features/auth/authSlice";
-import { clearAuthStorage } from "../Profile/profileStorage";
+import { logout, setCars } from "../../features/auth/authSlice";
+import { clearAuthStorage, persistCarsToStorage } from "../Profile/profileStorage";
 import {
   PAYMENT_METHODS,
   REPORT_ISSUE_TYPES,
@@ -96,6 +96,10 @@ const toDateMs = (value: unknown): number | null => {
   }
   return null;
 };
+
+const isVehicleCharging = (vehicle: { chargingStatus?: string | null }) =>
+  typeof vehicle.chargingStatus === "string" &&
+  vehicle.chargingStatus.trim().toUpperCase() === "CHARGING";
 
 // Builds the WebSocket URL for charging progress updates.
 const buildChargingSocketUrl = (stationId: string): string | null => {
@@ -235,6 +239,7 @@ export default function StationDetailPage() {
   >(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const chargingCompleteRequested = useRef(false);
+  const chargingVehicleIdRef = useRef<string | null>(null);
 
   const geo = useGeoLocation();
   const userCenter = geo.loc ?? { lat: -6.2, lng: 106.8167 };
@@ -320,6 +325,10 @@ export default function StationDetailPage() {
     ? Number(activeCar?.batteryPercent)
     : null;
   const activeStationId = station?.id ?? null;
+  const hasAvailableVehicles = useMemo(
+    () => cars.some((car) => !isVehicleCharging(car)),
+    [cars]
+  );
 
   const preferredConnectorType = useMemo(() => {
     if (!station) return undefined;
@@ -359,15 +368,19 @@ export default function StationDetailPage() {
 
   useEffect(() => {
     if (!startChargingOpen) return;
-    if (activeCarId && cars.some((car) => car.id === activeCarId)) {
-      setSelectedVehicleId(activeCarId);
-      return;
-    }
     if (!cars.length) {
       setSelectedVehicleId(null);
       return;
     }
-    setSelectedVehicleId(cars[0].id);
+    const activeCarMatch = activeCarId
+      ? cars.find((car) => car.id === activeCarId)
+      : null;
+    if (activeCarMatch && !isVehicleCharging(activeCarMatch)) {
+      setSelectedVehicleId(activeCarMatch.id);
+      return;
+    }
+    const availableCar = cars.find((car) => !isVehicleCharging(car)) ?? null;
+    setSelectedVehicleId(availableCar ? availableCar.id : null);
   }, [activeCarId, cars, startChargingOpen]);
 
   const isCompatible = useMemo(() => {
@@ -562,6 +575,24 @@ export default function StationDetailPage() {
     [activeCarId, cars]
   );
 
+  const updateVehicleChargingStatus = useCallback(
+    (vehicleId: string | null, status: string | null) => {
+      if (!vehicleId) return;
+      if (!cars.length) return;
+      const nextCars = cars.map((car) =>
+        car.id === vehicleId ? { ...car, chargingStatus: status } : car
+      );
+      dispatch(
+        setCars({
+          cars: nextCars,
+          activeCarId,
+        })
+      );
+      persistCarsToStorage(nextCars, activeCarId);
+    },
+    [activeCarId, cars, dispatch]
+  );
+
   const refreshStation = useCallback(async () => {
     if (!stationId) return;
     const result = await fetchStationById(stationId);
@@ -687,6 +718,10 @@ export default function StationDetailPage() {
       }
     }
 
+    if (vehicleId) {
+      chargingVehicleIdRef.current = vehicleId;
+      updateVehicleChargingStatus(vehicleId, "CHARGING");
+    }
     chargingCompleteRequested.current = false;
     await refreshStation();
     setEstimatedCompletionAt(null);
@@ -704,12 +739,29 @@ export default function StationDetailPage() {
       setChargingRequestError("No connectors available for this station.");
       return;
     }
+    if (cars.length > 0 && !hasAvailableVehicles) {
+      setChargingRequestError("All your vehicles are already charging.");
+      return;
+    }
     setChargingRequestError(null);
     setStartChargingOpen(true);
   };
 
   const handleConfirmStartCharging = async () => {
     if (!selectedConnectorType) return;
+    if (cars.length > 0) {
+      if (!selectedVehicleId) {
+        setChargingRequestError("Select a vehicle that is not charging.");
+        return;
+      }
+      const selectedVehicle =
+        cars.find((car) => car.id === selectedVehicleId) ?? null;
+      if (selectedVehicle && isVehicleCharging(selectedVehicle)) {
+        setChargingRequestError("That vehicle is already charging.");
+        return;
+      }
+    }
+    setChargingRequestError(null);
     setStartChargingOpen(false);
     await handleStartCharging(selectedConnectorType, selectedVehicleId);
   };
@@ -791,6 +843,13 @@ export default function StationDetailPage() {
   };
 
   useEffect(() => {
+    if (chargingStatus !== "done") return;
+    if (!chargingVehicleIdRef.current) return;
+    updateVehicleChargingStatus(chargingVehicleIdRef.current, null);
+    chargingVehicleIdRef.current = null;
+  }, [chargingStatus, updateVehicleChargingStatus]);
+
+  useEffect(() => {
     if (isAuthenticated) return;
     setPaymentOpen(false);
     setTicket(null);
@@ -805,6 +864,7 @@ export default function StationDetailPage() {
     setEstimatedCompletionAt(null);
     setChargingBatteryPercent(null);
     chargingCompleteRequested.current = false;
+    chargingVehicleIdRef.current = null;
   }, [isAuthenticated]);
 
   useEffect(() => {
