@@ -10,7 +10,6 @@ import {
   Tooltip,
   Stack,
 } from "@mui/material";
-import ElectricCarIcon from "@mui/icons-material/ElectricCar";
 import PersonIcon from "@mui/icons-material/Person";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -111,7 +110,12 @@ export default function RootLayout() {
               color: "white",
             }}
           >
-            <ElectricCarIcon fontSize="small" />
+            <Box
+              component="img"
+              src="/app-logo.svg"
+              alt="ChargeFinder logo"
+              sx={{ width: 22, height: 22 }}
+            />
           </Box>
           <Typography
             sx={{ fontWeight: 950, letterSpacing: 0.2, color: UI.text }}
